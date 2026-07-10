@@ -1,0 +1,16 @@
+{
+  "modes": [
+    {
+      "id": "new_build",
+      "label": "New Build",
+      "description": "Start a project from scratch with no existing codebase.",
+      "phases": ["audit_disabled", "context_injection_disabled"]
+    },
+    {
+      "id": "existing_app",
+      "label": "Existing App",
+      "description": "Work on an existing codebase with audit and context injection.",
+      "phases": ["audit_enabled", "context_injection_enabled"]
+    }
+  ]
+}

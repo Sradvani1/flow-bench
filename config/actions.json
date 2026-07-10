@@ -1,0 +1,261 @@
+{
+  "start_new_project": {
+    "label": "Start new project",
+    "description": "Create a new project from scratch",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "load_existing_project": {
+    "label": "Load existing app",
+    "description": "Point to an existing codebase and audit it",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "change_backend": {
+    "label": "Change backend",
+    "description": "Switch the execution adapter",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "edit_scope": {
+    "label": "Edit scope",
+    "description": "Update your app idea description",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "generate_master_plan": {
+    "label": "Generate master plan",
+    "description": "Create a full project plan from your scope",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "cancel_project": {
+    "label": "Cancel project",
+    "description": "Stop working on this project",
+    "risk_category": "destructive",
+    "risk_explanation": "This will mark the project as cancelled. All artifacts and history are preserved but the project will be considered complete.",
+    "action_type": "system"
+  },
+  "refine_plan": {
+    "label": "Refine the plan",
+    "description": "Re-generate the master plan with updated context",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "sharpen_plan": {
+    "label": "Refine the plan",
+    "description": "Ask the agent to review the plan and surface ambiguities or missing context",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "accept_master_plan": {
+    "label": "Accept the plan",
+    "description": "Mark the master plan as sharp and proceed to phase execution",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "start_next_phase": {
+    "label": "Start next phase",
+    "description": "Begin working on the first upcoming phase",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "view_all_phases": {
+    "label": "View all phases",
+    "description": "See the full phase queue",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "navigation"
+  },
+  "reorder_phases": {
+    "label": "Re-order phases",
+    "description": "Change the order of upcoming phases",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "accept_handoff": {
+    "label": "Accept handoff",
+    "description": "Mark the phase handoff as complete",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "replan_from_here": {
+    "label": "Re-plan from here",
+    "description": "Go back to the master plan and revise it",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "revise_scope": {
+    "label": "Revise scope",
+    "description": "Go back to the scope and change what you want to build",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "view_summary": {
+    "label": "View summary",
+    "description": "See the full project summary",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "navigation"
+  },
+  "archive_project": {
+    "label": "Archive project",
+    "description": "Save the project state and start fresh",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "generate_phase_plan": {
+    "label": "Generate phase plan",
+    "description": "Create a detailed plan for this phase only",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "skip_phase": {
+    "label": "Skip this phase",
+    "description": "Skip this phase and move to the next one",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "cancel_phase": {
+    "label": "Cancel phase",
+    "description": "Cancel this phase and return to the project queue",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "sharpen_phase_plan": {
+    "label": "Sharpen this plan",
+    "description": "Ask the agent to review the phase plan for ambiguities",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "accept_phase_plan": {
+    "label": "Accept phase plan",
+    "description": "Mark this phase plan as sharp and prepare to build",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "start_building": {
+    "label": "Start building",
+    "description": "Execute the phase plan",
+    "risk_category": "modify_files",
+    "risk_explanation": "Starting this build may create, modify, or delete files in your project directory.",
+    "action_type": "adapter"
+  },
+  "change_phase_plan": {
+    "label": "Change phase plan",
+    "description": "Go back and revise the phase plan",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "pause": {
+    "label": "Pause",
+    "description": "Stop the current build and inspect progress",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "ask_for_summary": {
+    "label": "Ask for a summary",
+    "description": "Get a progress update from the coding agent",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "accept_review": {
+    "label": "Accept review",
+    "description": "Mark the review as complete and proceed to testing",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "fix_findings": {
+    "label": "Fix findings",
+    "description": "Have the coding agent address review findings",
+    "risk_category": "modify_files",
+    "risk_explanation": "The coding agent will modify files to address review findings.",
+    "action_type": "adapter"
+  },
+  "override_and_continue": {
+    "label": "Override and continue",
+    "description": "Ignore review findings and proceed to testing",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "accept_test_results": {
+    "label": "Accept test results",
+    "description": "Mark tests as passing and proceed to handoff",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "fix_failures": {
+    "label": "Fix failures",
+    "description": "Have the coding agent address test failures",
+    "risk_category": "modify_files",
+    "risk_explanation": "The coding agent will modify files to fix test failures.",
+    "action_type": "adapter"
+  },
+  "skip_tests": {
+    "label": "Skip tests",
+    "description": "Skip testing and proceed to handoff",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "generate_handoff": {
+    "label": "Generate handoff notes",
+    "description": "Create structured notes for the next phase",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "view_handoff_notes": {
+    "label": "View handoff notes",
+    "description": "Read the handoff artifact for this phase",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "navigation"
+  },
+  "retry": {
+    "label": "Retry",
+    "description": "Try the last action again",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
+  },
+  "replan_phase": {
+    "label": "Re-plan phase",
+    "description": "Go back to the phase plan and revise it",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "system"
+  },
+  "abandon_phase": {
+    "label": "Abandon phase",
+    "description": "Cancel this phase and return to the project queue",
+    "risk_category": "destructive",
+    "risk_explanation": "Abandoning a phase discards any uncompleted work. The phase can be restarted later.",
+    "action_type": "system"
+  }
+}

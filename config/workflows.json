@@ -1,0 +1,427 @@
+{
+  "project_machine": {
+    "states": {
+      "starting": {
+        "actions": {
+          "start_new_project": {
+            "target_state": "scope_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "project_created"
+          },
+          "load_existing_project": {
+            "target_state": "scope_ready",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "project_loaded_existing"
+          },
+          "change_backend": {
+            "target_state": "starting",
+            "action_type": "system",
+            "guard": null,
+            "event": "backend_changed"
+          }
+        },
+        "events": {}
+      },
+      "scope_ready": {
+        "actions": {
+          "edit_scope": {
+            "target_state": "scope_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "scope_edited"
+          },
+          "generate_master_plan": {
+            "target_state": "master_plan_drafting",
+            "action_type": "adapter",
+            "guard": "scope_has_content",
+            "event": "master_plan_generation_started"
+          },
+          "cancel_project": {
+            "target_state": "project_complete",
+            "action_type": "system",
+            "guard": null,
+            "event": "project_cancelled"
+          }
+        },
+        "events": {}
+      },
+      "master_plan_drafting": {
+        "actions": {
+          "refine_plan": {
+            "target_state": "master_plan_drafting",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "master_plan_refinement_started"
+          }
+        },
+        "events": {
+          "draft_complete": {
+            "target_state": "master_plan_sharpening"
+          },
+          "draft_failed": {
+            "target_state": "project_blocked"
+          }
+        }
+      },
+      "master_plan_sharpening": {
+        "actions": {
+          "sharpen_plan": {
+            "target_state": "master_plan_sharpening",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "master_plan_sharpening_iteration"
+          },
+          "accept_master_plan": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "master_plan_accepted"
+          },
+          "cancel_project": {
+            "target_state": "project_complete",
+            "action_type": "system",
+            "guard": null,
+            "event": "project_cancelled"
+          }
+        },
+        "events": {}
+      },
+      "phase_queue_ready": {
+        "actions": {
+          "start_next_phase": {
+            "target_state": "phase_in_progress",
+            "action_type": "system",
+            "guard": "next_phase_exists",
+            "event": "phase_started"
+          },
+          "view_all_phases": {
+            "target_state": "phase_queue_ready",
+            "action_type": "navigation",
+            "guard": null,
+            "event": null
+          },
+          "reorder_phases": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": "has_upcoming_phases",
+            "event": "phases_reordered"
+          }
+        },
+        "events": {
+          "all_phases_complete": {
+            "target_state": "project_complete"
+          }
+        }
+      },
+      "phase_in_progress": {
+        "actions": {},
+        "events": {
+          "phase_completed": {
+            "target_state": "phase_handoff"
+          }
+        }
+      },
+      "phase_handoff": {
+        "actions": {
+          "accept_handoff": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "handoff_accepted"
+          }
+        },
+        "events": {}
+      },
+      "project_blocked": {
+        "actions": {
+          "replan_from_here": {
+            "target_state": "master_plan_sharpening",
+            "action_type": "system",
+            "guard": null,
+            "event": "project_replanned"
+          },
+          "revise_scope": {
+            "target_state": "scope_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "scope_revision_started"
+          },
+          "cancel_project": {
+            "target_state": "project_complete",
+            "action_type": "system",
+            "guard": null,
+            "event": "project_cancelled"
+          }
+        },
+        "events": {}
+      },
+      "project_complete": {
+        "actions": {
+          "view_summary": {
+            "target_state": "project_complete",
+            "action_type": "navigation",
+            "guard": null,
+            "event": null
+          },
+          "archive_project": {
+            "target_state": "project_complete",
+            "action_type": "system",
+            "guard": null,
+            "event": "project_archived"
+          },
+          "start_new_project": {
+            "target_state": "starting",
+            "action_type": "system",
+            "guard": null,
+            "event": "new_project_started"
+          }
+        },
+        "events": {}
+      }
+    }
+  },
+  "phase_machine": {
+    "states": {
+      "phase_starting": {
+        "actions": {
+          "generate_phase_plan": {
+            "target_state": "phase_plan",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "phase_plan_generation_started"
+          },
+          "skip_phase": {
+            "target_state": "phase_complete",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_skipped"
+          },
+          "cancel_phase": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_cancelled"
+          }
+        },
+        "events": {}
+      },
+      "phase_plan": {
+        "actions": {},
+        "events": {
+          "phase_draft_complete": {
+            "target_state": "phase_sharpening"
+          },
+          "phase_draft_failed": {
+            "target_state": "phase_blocked"
+          }
+        }
+      },
+      "phase_sharpening": {
+        "actions": {
+          "sharpen_phase_plan": {
+            "target_state": "phase_sharpening",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "phase_sharpening_iteration"
+          },
+          "accept_phase_plan": {
+            "target_state": "phase_ready_to_build",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_plan_accepted"
+          }
+        },
+        "events": {}
+      },
+      "phase_ready_to_build": {
+        "actions": {
+          "start_building": {
+            "target_state": "phase_building",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "phase_build_started"
+          },
+          "change_phase_plan": {
+            "target_state": "phase_plan",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_plan_revision_started"
+          },
+          "cancel_phase": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_cancelled"
+          }
+        },
+        "events": {}
+      },
+      "phase_building": {
+        "actions": {
+          "pause": {
+            "target_state": "phase_blocked",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_build_paused"
+          },
+          "ask_for_summary": {
+            "target_state": "phase_building",
+            "action_type": "adapter",
+            "guard": null,
+            "event": null
+          },
+          "cancel_phase": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_cancelled"
+          }
+        },
+        "events": {
+          "build_complete": {
+            "target_state": "phase_reviewing"
+          },
+          "build_failed": {
+            "target_state": "phase_blocked"
+          }
+        }
+      },
+      "phase_reviewing": {
+        "actions": {
+          "accept_review": {
+            "target_state": "phase_testing",
+            "action_type": "system",
+            "guard": null,
+            "event": "review_accepted"
+          },
+          "fix_findings": {
+            "target_state": "phase_fixing",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "fixing_started"
+          },
+          "override_and_continue": {
+            "target_state": "phase_testing",
+            "action_type": "system",
+            "guard": null,
+            "event": "review_overridden"
+          }
+        },
+        "events": {}
+      },
+      "phase_testing": {
+        "actions": {
+          "accept_test_results": {
+            "target_state": "phase_handoff",
+            "action_type": "system",
+            "guard": null,
+            "event": "tests_accepted"
+          },
+          "fix_failures": {
+            "target_state": "phase_fixing",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "fixing_started"
+          },
+          "skip_tests": {
+            "target_state": "phase_handoff",
+            "action_type": "system",
+            "guard": null,
+            "event": "tests_skipped"
+          }
+        },
+        "events": {
+          "tests_passed": {
+            "target_state": "phase_handoff"
+          },
+          "tests_failed": {
+            "target_state": "phase_fixing"
+          }
+        }
+      },
+      "phase_fixing": {
+        "actions": {
+          "pause": {
+            "target_state": "phase_blocked",
+            "action_type": "system",
+            "guard": null,
+            "event": "fixing_paused"
+          },
+          "cancel_phase": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_cancelled"
+          }
+        },
+        "events": {
+          "fix_complete": {
+            "target_state": "phase_reviewing"
+          },
+          "fix_failed": {
+            "target_state": "phase_blocked"
+          }
+        }
+      },
+      "phase_handoff": {
+        "actions": {
+          "generate_handoff": {
+            "target_state": "phase_handoff",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "handoff_generated"
+          },
+          "accept_handoff": {
+            "target_state": "phase_complete",
+            "action_type": "system",
+            "guard": null,
+            "event": "handoff_accepted"
+          }
+        },
+        "events": {}
+      },
+      "phase_complete": {
+        "actions": {
+          "start_next_phase": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": "next_phase_exists",
+            "event": "next_phase_requested"
+          },
+          "view_handoff_notes": {
+            "target_state": "phase_complete",
+            "action_type": "navigation",
+            "guard": null,
+            "event": null
+          }
+        },
+        "events": {}
+      },
+      "phase_blocked": {
+        "actions": {
+          "retry": {
+            "target_state": "phase_blocked",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "phase_retried"
+          },
+          "replan_phase": {
+            "target_state": "phase_plan",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_replanned"
+          },
+          "abandon_phase": {
+            "target_state": "phase_queue_ready",
+            "action_type": "system",
+            "guard": null,
+            "event": "phase_abandoned"
+          }
+        },
+        "events": {}
+      }
+    }
+  }
+}

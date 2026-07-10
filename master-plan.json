@@ -1,0 +1,852 @@
+{
+  "project": "FlowBench",
+  "version": "3.0.0",
+  "generated_at": "2026-07-10T00:00:00Z",
+  "scope_source": "FlowBench Product Scope v2.0.md",
+  "methodology": "The same master-plan-and-phase-loop that FlowBench itself orchestrates. Each phase below will be run through the full sub-loop: plan → sharpen → build → review → test → fix → handoff.",
+  "authoritative_reference": "workflow-contract.json",
+  "note": "The Workflow Contract (workflow-contract.json) is the single authoritative source of truth for every state, action, transition, artifact, event, and recovery path. This master plan implements the contract. If any conflict exists between this file and workflow-contract.json, the contract wins.",
+  "architecture_decisions": [
+    "Single active project. current-state.json at <repo>/.flowbench/. No project ID in API surface.",
+    "HTTP polling: 2s during active states (building), 5s otherwise. ETag/updated_at header for short-circuit.",
+    "Command template discovery via filesystem glob — no hardcoded list.",
+    "Backend starts regardless of adapter health. Health indicator in settings UI.",
+    "Development: separate processes (next dev + uvicorn). Production: single `flowbench start` CLI.",
+    "Prerequisites: Python 3.11+ with uv, Node.js 20+ with pnpm.",
+    "State machine is pure Python with zero I/O — takes (state, action) → (state, events).",
+    "Transition rules: JSON graph from workflows.json + Python guard callbacks for conditional logic.",
+    "Serialization: Pydantic model_dump_json(indent=2) for artifacts, json.dumps() for NDJSON events.",
+    "Minimal event record — no state snapshots, no diffs.",
+    "TanStack Query for server state. React context for UI state. No Zustand/Redux.",
+    "Fixed set of 12 shadcn/ui components: Button, Card, Badge, Tabs, ScrollArea, Separator, Skeleton, Toast, Select, Switch, Dialog, DropdownMenu.",
+    "Fixed-height command pane with scroll for overflow.",
+    "All artifacts read-only except Scope (editable textarea in scope_ready stage).",
+    "string.Template with $variable syntax in command templates.",
+    "Per-method configurable timeouts in adapter config.",
+    "Structured output via temp file + stdout fallback for adapter results.",
+    "Adapter always runs in project repo directory.",
+    "Approval model: stage-level only. Risk categories declared per-action in actions.json. Approval is a pre-dispatch UI confirmation. Adapter never returns risky action flags.",
+    "Rejecting approval does nothing. Approving dispatches the adapter action. No resume model, no mid-execution pause.",
+    "Every adapter-backed action creates a RunRecord. Single-active-run lock enforced.",
+    "On startup, any run with status=running is set to status=interrupted. Builder chooses recovery. Never auto-rerun.",
+    "App audit: 5-section structured report. No function-level analysis.",
+    "Existing app mode works on any directory — git not required.",
+    "Install script verifies prerequisites only, prints install instructions for missing ones.",
+    "Single flowbench CLI via click: flowbench start, flowbench status, flowbench help.",
+    "Bind FastAPI to 127.0.0.1 only. Validate/normalize repo paths. Resolve symlinks. Artifact writes restricted to <repo>/.flowbench/. Never persist secrets.",
+    "Backend is the safety authority for approval. UI is a convenience layer. A risky action is never accepted merely because a client claims prior confirmation. Backend independently checks confirmed flag against the action's configured risk_category.",
+    "Atomic writes: write temp file → fsync → rename into place. Events appended only after durable write succeeds.",
+    "Every persisted top-level artifact carries a version number from the start (schema_version field)."
+  ],
+  "total_phases": 7,
+  "phases": [
+    {
+      "phase_id": "phase_001",
+      "phase_name": "Foundation — State Machine, Schemas, Run Persistence, and Event Log",
+      "summary": "Build the durable foundation: pure-logic state machines, Pydantic schemas (all with schema_version), RunRecord persistence, atomic file writes, FileStore with safe write semantics, FastAPI service skeleton, JSON/NDJSON event log, and the Workflow Contract validation harness. Everything else depends on this phase.",
+      "estimated_complexity": "high",
+      "dependencies": [],
+      "deliverable": "Read-oriented FastAPI service that governs state transitions, persists state atomically with schema versions, stores RunRecords (with command_context_hash), logs events, and validates against the Workflow Contract. POST /actions returns adapter_not_available for adapter-backed actions. Only state-only (system, navigation) actions execute. No UI. No adapter.",
+      "success_criteria": [
+        "Both state machines govern all transitions from workflow-contract.json",
+        "Invalid transitions rejected with clear plain English error",
+        "All state and artifacts persist atomically and survive restart",
+        "Event log records every transition with timestamp, level, actor, description",
+        "RunRecord store implemented; single-active-run lock enforced; interrupted runs detected on startup",
+        "Schema versioning on all persisted artifacts",
+        "Workflow contract validation tests pass — every state has valid actions, every action has label, every transition has target",
+        "POST /actions returns adapter_not_available for adapter-backed actions (action_type: adapter); only state-only and navigation actions execute",
+        "State-only actions (system, navigation) execute and transition correctly",
+        "Adapter-backed actions do not execute, create no RunRecord, and do not change state",
+        "FastAPI service responds to health check; read endpoints return correct results"
+      ],
+      "sub_tasks": [
+        {
+          "id": "1.1",
+          "title": "Monorepo scaffolding and project structure",
+          "description": "Create the full monorepo directory tree: apps/web, services/orchestrator, config/, adapters/, docs/. Initialize Python project with pyproject.toml (FastAPI, Pydantic, uvicorn, click). Initialize Next.js app in apps/web with TypeScript, Tailwind, shadcn/ui, TanStack Query, pnpm. Set up ruff for Python, eslint for TypeScript.",
+          "files_touched": [
+            "pyproject.toml",
+            "apps/web/package.json",
+            "apps/web/tsconfig.json",
+            "apps/web/tailwind.config.ts",
+            "config/project-modes.json",
+            "config/workflows.json",
+            "config/actions.json",
+            "config/policies.json",
+            "config/adapters/opencode.json"
+          ],
+          "success_criteria": [
+            "Both Python and Node.js projects initialize without errors",
+            "Directory tree matches workflow-contract.json expectations",
+            "ruff and eslint pass on empty project skeletons"
+          ]
+        },
+        {
+          "id": "1.2",
+          "title": "Pydantic schemas with schema versioning",
+          "description": "Define Pydantic models for every state and artifact in workflow-contract.json: CurrentState, PhaseQueueItem, MasterPlan, SharpeningNotes, PhasePlan, BuildSummary, ReviewFindings, TestResults, Handoff, EventLogEntry, ApprovalRecord, AdapterResult. NEW: RunRecord schema. All schemas include a schema_version: int field (start at 1). No project_id field (single active project). Use model_dump_json(indent=2) for serialization. Schema location: services/orchestrator/schemas/.",
+          "files_touched": [
+            "services/orchestrator/schemas/__init__.py",
+            "services/orchestrator/schemas/state.py",
+            "services/orchestrator/schemas/artifacts.py",
+            "services/orchestrator/schemas/events.py",
+            "services/orchestrator/schemas/approvals.py",
+            "services/orchestrator/schemas/adapter.py",
+            "services/orchestrator/schemas/run_record.py"
+          ],
+          "success_criteria": [
+            "All schemas defined matching workflow-contract.json",
+            "schema_version field (int, default 1) on every top-level artifact",
+            "RunRecord created with all required fields from workflow contract",
+            "Schemas serialize/deserialize correctly, validate required fields"
+          ]
+        },
+        {
+          "id": "1.3",
+          "title": "Pure two-level state machine engine",
+          "description": "Build a pure-Python state machine with zero I/O dependencies. Takes (current_state, action) and returns (new_state, events). Load transition graph from config/workflows.json. Guards are Python callbacks for conditional transitions (e.g., 'all phases complete'). Two instances: project machine and phase machine. No file access, no network — purely deterministic. Transitions must match workflow-contract.json exactly.",
+          "files_touched": [
+            "services/orchestrator/engine/__init__.py",
+            "services/orchestrator/engine/state_machine.py",
+            "services/orchestrator/engine/project_machine.py",
+            "services/orchestrator/engine/phase_machine.py",
+            "services/orchestrator/engine/guards.py",
+            "config/workflows.json"
+          ],
+          "success_criteria": [
+            "All transitions from workflow-contract.json implemented and tested",
+            "Invalid transitions raise StateTransitionError with description",
+            "Zero I/O — no imports from json, os, pathlib",
+            "Guards are registered Python callbacks",
+            "State machine behavior matches workflow-contract.json exactly"
+          ]
+        },
+        {
+          "id": "1.4",
+          "title": "Atomic file store with safe write semantics",
+          "description": "Implement file-backed persistence with atomic writes: write to temporary file → os.fsync() → os.rename() into place. All state and artifacts at <repo>/.flowbench/. No project-name subdirectory. Flat artifact namespace (phase-specific files use <type>-<phase-id>.json). Events append to events.ndjson (compact, one object per line, no trailing newline). Events only appended after the artifact write that triggered them has durably completed. Pydantic model_dump_json(indent=2) for state/artifacts. json.dumps() for NDJSON. Files locked against concurrent access. Follow artifact_layout rules from workflow-contract.json.",
+          "files_touched": [
+            "services/orchestrator/store/__init__.py",
+            "services/orchestrator/store/file_store.py",
+            "services/orchestrator/store/event_log.py"
+          ],
+      "success_criteria": [
+        "Atomic writes: temp file → fsync → rename (no partial writes visible)",
+        "Events only appended after successful artifact write",
+        "State persists to <repo>/.flowbench/ and reloads after restart",
+        "Missing files initialize with defaults",
+        "Concurrent access does not corrupt state",
+        "All writes stay within <repo>/.flowbench/ — no writes outside this directory"
+      ]
+        },
+        {
+          "id": "1.5",
+          "title": "RunRecord persistence and interrupted-run recovery",
+          "description": "Implement RunRecord store: persists to <repo>/.flowbench/runs/{run_id}.json. RunRecord tracks: run_id (ulid), action, phase_id, started_at, finished_at, status (queued|running|succeeded|failed|timed_out|cancelled|interrupted), input_artifact_refs, output_artifact_path, failure_message, recovery_message, template_version, working_directory, command_context_hash (sha256 of assembled context bundle inputs). Enforce single-active-run lock — reject new adapter actions if a run is already in 'running' status. On startup, scan for runs with status=running, set to status=interrupted, and surface recovery prompt data (with the four recovery choices from workflow-contract.json). Status transitions follow contract: terminal states never transition back to running; retry creates a new RunRecord.",
+          "files_touched": [
+            "services/orchestrator/store/run_store.py",
+            "services/orchestrator/services/run_service.py",
+            "services/orchestrator/api/runs.py"
+          ],
+          "success_criteria": [
+            "RunRecord created before every adapter action dispatch",
+            "Single-active-run lock enforced — reject concurrent runs",
+            "On startup, running runs become interrupted",
+            "Recovery prompt data (failure_message, recovery_message) available via API",
+            "Never auto-rerun interrupted work"
+          ]
+        },
+        {
+          "id": "1.6",
+          "title": "FastAPI service with state, action, and run endpoints",
+      "description": "Wire the pure state machine, atomic file store, and run store into a FastAPI application. Bind to 127.0.0.1 only. Endpoints: GET /state, GET /actions (stage-valid actions with plain English labels from workflow contract, including action_type), POST /actions/{action} (VALIDATION-ONLY in Phase 1 — see below), GET /events (paginated 50/page, level filter), GET /runs (run history), GET /runs/{id}, GET /runs/active (current active or interrupted run), GET /health. No project CRUD.\n\nPOST /actions/{action} Phase 1 behavior: Check action_type from actions.json. If action_type is 'adapter', return adapter_not_available response with plain English explanation (\"This action requires the OpenCode adapter, which is not available yet. It will be ready in a future update.\"). No RunRecord created, no state change, no adapter called. If action_type is 'system' or 'navigation', validate the transition against the state machine and execute (no RunRecord, no adapter). If action_type is 'adapter' and the action has a risk_category, still return adapter_not_available — the approval gate is not implemented until Phase 3.\n\nNo RunRecord is ever created for any action in Phase 1. The RunRecord store is wired and tested independently but is not called from the action endpoint.",
+      "files_touched": [
+        "services/orchestrator/main.py",
+        "services/orchestrator/api/__init__.py",
+        "services/orchestrator/api/state.py",
+        "services/orchestrator/api/actions.py",
+        "services/orchestrator/api/events.py",
+        "services/orchestrator/api/runs.py"
+      ],
+      "success_criteria": [
+        "All read endpoints respond correctly with plain English labels",
+        "State-only actions (system, navigation) execute and transition correctly via POST /actions",
+        "Adapter-backed actions return adapter_not_available with plain English explanation — no state change, no RunRecord",
+        "Invalid transitions return 400 with plain English explanation",
+        "Events returned paginated at 50/page",
+        "Server bound to 127.0.0.1 only",
+        "No RunRecord is created by any action endpoint in Phase 1 (run store is tested independently)"
+      ]
+        },
+        {
+          "id": "1.7",
+          "title": "Config files — workflows, actions, policies, adapters",
+          "description": "Create config JSON files. workflows.json: transition graph (states, actions, events, targets, guard refs) matching workflow-contract.json. actions.json: every action per state with plain English label, risk_category (or null), risk_explanation (or null), and action_type. policies.json: V1 risk category definitions (modify_files, install_packages, destructive, git_operation, config_change). project-modes.json: new_build and existing_app definitions. adapters/opencode.json: per-method timeouts.",
+          "files_touched": [
+            "config/workflows.json",
+            "config/actions.json",
+            "config/policies.json",
+            "config/project-modes.json",
+            "config/adapters/opencode.json"
+          ],
+          "success_criteria": [
+            "Config files match workflow-contract.json exactly",
+            "All actions have plain English labels",
+            "Risk categories declared per-action with explanations",
+            "Config files validate against their Pydantic schemas"
+          ]
+        },
+        {
+          "id": "1.8",
+          "title": "Workflow contract validation tests",
+          "description": "Write tests that verify the config files and state machine against workflow-contract.json: every configured state has valid actions, every action has a plain English label, every transition has a defined target state, every terminal or blocked state has a recovery path, every adapter action has a context bundle rule. These tests fail the build if the contract is violated.",
+          "files_touched": [
+            "services/orchestrator/tests/test_workflow_contract.py"
+          ],
+          "success_criteria": [
+            "Complete coverage of workflow-contract.json rules",
+            "Build fails if contract is violated",
+            "Tests are data-driven (read contract.json, validate against config and state machine)"
+          ]
+        },
+        {
+          "id": "1.9",
+          "title": "Foundation unit and API tests",
+          "description": "Write pytest tests: state machine (valid/invalid transitions, guards — zero fixtures, pure function calls), atomic file store (persistence, loading, crash recovery simulation, concurrent access), schemas (validation, malformed input rejection, schema_version enforcement), RunRecord store (CRUD, single-active-run lock, interrupted-run detection on simulated startup), API (endpoint responses, risky action flagging, pagination, health check). Target >95% coverage on engine/ and store/.",
+          "files_touched": [
+            "services/orchestrator/tests/__init__.py",
+            "services/orchestrator/tests/test_state_machine.py",
+            "services/orchestrator/tests/test_file_store.py",
+            "services/orchestrator/tests/test_schemas.py",
+            "services/orchestrator/tests/test_run_store.py",
+            "services/orchestrator/tests/test_api.py"
+          ],
+          "success_criteria": [
+            "All tests pass",
+            ">95% coverage on engine/ and store/",
+            "State machine tests have no fixtures — pure function calls"
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_002",
+      "phase_name": "Console UI — Shell, Navigation, and Base Layout",
+      "summary": "Build the console shell only: project header, stage-aware command pane (with approval confirmation for risky actions), placeholder artifact area, basic phase queue shell, settings entry point, and base layout. All artifact rendering and timeline work is deferred to Phase 4.",
+      "estimated_complexity": "high",
+      "dependencies": ["phase_001"],
+      "deliverable": "A working Next.js console shell with three-pane layout, TanStack Query polling, stage-aware command pane that shows risk confirmation for flagged actions, placeholder artifact area, basic queue list, and settings entry point. Artifacts render as simple JSON until Phase 4.",
+      "success_criteria": [
+        "Three-pane layout renders correctly: header, command pane, artifact area",
+        "Command pane shows only stage-valid actions from workflow-contract.json",
+        "Risky actions show confirmation dialog before dispatching (approval is UI-side only, no state change)",
+        "Rejecting approval does nothing. Approving dispatches to backend.",
+        "Phase queue rendered as a simple list with color-coded status",
+        "Polling at 2s during building, 5s otherwise, with updated_at short-circuit",
+        "Light and dark mode both work",
+        "All labels use plain English from workflow-contract.json",
+        "Artifact area shows placeholder (JSON dump or 'No artifact yet') until Phase 4"
+      ],
+      "sub_tasks": [
+        {
+          "id": "2.1",
+          "title": "Next.js + shadcn/ui + TanStack Query — base layout",
+          "description": "Scaffold Next.js 14+ with TypeScript, Tailwind, pnpm. Install fixed set of 12 shadcn/ui components (Button, Card, Badge, Tabs, ScrollArea, Separator, Skeleton, Toast, Select, Switch, Dialog, DropdownMenu). Install TanStack Query. Set up next-themes. Create three-pane CSS Grid layout. This phase installs exactly these 12 components — no more.",
+          "files_touched": [
+            "apps/web/package.json",
+            "apps/web/tsconfig.json",
+            "apps/web/tailwind.config.ts",
+            "apps/web/src/app/layout.tsx",
+            "apps/web/src/app/globals.css"
+          ],
+          "success_criteria": [
+            "App starts with pnpm run dev",
+            "Three-pane layout renders at 1440px+",
+            "Dark mode toggles without flicker",
+            "Exactly 12 shadcn/ui components installed"
+          ]
+        },
+        {
+          "id": "2.2",
+          "title": "Project header with adaptive polling",
+          "description": "Build header: app name, mode label (New Build / Existing App), level label (Project / Phase), current stage in plain English, last updated timestamp. Reads from GET /state. TanStack Query with refetchInterval: 2000ms during phase_building, 5000ms otherwise. ETag/updated_at short-circuit.",
+          "files_touched": [
+            "apps/web/src/components/project-header.tsx",
+            "apps/web/src/hooks/use-project-state.ts"
+          ],
+          "success_criteria": [
+            "Header shows all fields with plain English labels from workflow-contract.json",
+            "Polling switches between 2s and 5s based on current state",
+            "No unnecessary re-renders when state is unchanged"
+          ]
+        },
+        {
+      "id": "2.3",
+      "title": "Stage-aware command pane with risk confirmation (UI shell only)",
+      "description": "Build left sidebar command pane. Fetch actions from GET /actions (which returns actions with their risk_category and risk_explanation). Fixed-height pane, scrolls if >5 buttons. Risky actions show a confirmation dialog (Dialog from shadcn/ui) displaying a MOCKED or HARDCODED risk explanation — the dialog surface exists but is not wired to the backend's actual policy engine yet. 'Yes, go ahead' sends POST /actions/{action} with confirmed:true (which Phase 1 backend will return adapter_not_available for — that's expected). 'No, don't do this' closes the dialog with no API call. The dialog sends the confirmed flag but does NOT validate anything server-side in isolation; full backend enforcement is added in Phase 3.",
+      "files_touched": [
+        "apps/web/src/components/command-pane.tsx",
+        "apps/web/src/components/risk-confirmation-dialog.tsx",
+        "apps/web/src/hooks/use-actions.ts"
+      ],
+      "success_criteria": [
+        "Only stage-valid actions appear",
+        "Fixed-height pane with scroll for overflow",
+        "Risk confirmation dialog shows for actions with risk_category",
+        "Dialog shows risk explanation text (may use hardcoded values in Phase 2)",
+        "Reject → no API call, stay in same state",
+        "Approve → POST /actions/{action} with confirmed:true flag",
+        "All labels use plain English per workflow-contract.json",
+        "Backend enforcement of confirmed flag is NOT expected yet — that is Phase 3"
+      ]
+        },
+        {
+          "id": "2.4",
+          "title": "Placeholder artifact area and basic phase queue",
+          "description": "Main content area: placeholder that shows either a simple JSON dump of the current artifact (raw, no formatting) or a 'No artifact yet' message. Basic phase queue tab: simple list with phase name and colored badge (green/blue/gray/red). Full artifact renderers and timeline are Phase 4.",
+          "files_touched": [
+            "apps/web/src/components/artifact-panel.tsx",
+            "apps/web/src/components/phase-queue.tsx",
+            "apps/web/src/hooks/use-phase-queue.ts"
+          ],
+          "success_criteria": [
+            "Artifact area shows JSON dump or empty state message",
+            "Phase queue shows all phases with correct color-coded status",
+            "Current phase highlighted with border"
+          ]
+        },
+        {
+          "id": "2.5",
+          "title": "Settings button and page entry point",
+          "description": "Gear icon in header opens settings. Settings page: repo path input, mode toggle, adapter dropdown (placeholder — health indicator added in Phase 7), policy toggles. Settings page is functionally complete but the adapter health indicator wireframe is left for Phase 7.",
+          "files_touched": [
+            "apps/web/src/components/settings-screen.tsx",
+            "apps/web/src/components/project-header.tsx (add gear icon)"
+          ],
+          "success_criteria": [
+            "Settings page renders and saves correctly",
+            "Repo path input validates"
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_003",
+      "phase_name": "OpenCode Adapter — Execution Backend Integration",
+      "summary": "Implement the abstract ExecutionAdapter interface and the OpenCode adapter. 10 command templates with string.Template $variable syntax. Per-method timeouts. Structured output via temp file + stdout fallback. Runs are tracked via RunRecord (created by Phase 1 run service). Approval is stage-level (confirmed in UI, not detected from adapter output).",
+      "estimated_complexity": "high",
+      "dependencies": ["phase_001"],
+      "deliverable": "All adapter methods execute real OpenCode CLI commands. RunRecords created for every call. AdapterResult captures success, output, artifact_path, suggested_next_action. No risk detection from adapter output — approval is UI-side only.",
+      "success_criteria": [
+        "All ExecutionAdapter methods implemented for OpenCode",
+        "Each command template is a valid OpenCode markdown file with $variable syntax",
+        "Templates discovered via filesystem glob — no hardcoded list",
+        "Structured output from temp file ($output_file) + stdout fallback",
+        "Per-method timeouts configurable in config/adapters/opencode.json",
+        "Adapter does NOT return proposed_risky_actions — removed from AdapterResult",
+        "RunRecord created via run service for every adapter call",
+        "End-to-end: button click → confirmation (if risky) → API → RunRecord → adapter → result → state update → UI update"
+      ],
+      "sub_tasks": [
+        {
+          "id": "3.1",
+          "title": "ExecutionAdapter interface and AdapterResult (revised)",
+          "description": "Define abstract ExecutionAdapter base class. AdapterResult Pydantic model: success (bool), output_text (str), artifact_path (str | None), suggested_next_action (str | None). NOTE: proposed_risky_actions is REMOVED from AdapterResult — all risk detection is done at the action level in actions.json, not from adapter output. Adapter registry loads by config name.",
+          "files_touched": [
+            "services/orchestrator/adapters/__init__.py",
+            "services/orchestrator/adapters/base.py",
+            "services/orchestrator/adapters/registry.py"
+          ],
+          "success_criteria": [
+            "Interface matches workflow-contract.json adapter methods",
+            "AdapterResult does NOT have proposed_risky_actions (removed)",
+            "Registry loads adapters by name from config"
+          ]
+        },
+        {
+          "id": "3.2",
+          "title": "OpenCode adapter implementation",
+          "description": "Implement OpenCodeAdapter(ExecutionAdapter). Each method: constructs command via string.Template with $variable, runs `opencode run <template> <args>` as subprocess (cwd=repo_path), captures structured output from temp file ($output_file), falls back to last 10KB of stdout, records RunRecord via run service (run_service.start_run before dispatch, run_service.complete_run on result). Per-method timeouts from config. NOTE: no risk flagging in adapter — removed entirely.",
+          "files_touched": [
+            "services/orchestrator/adapters/opencode/__init__.py",
+            "services/orchestrator/adapters/opencode/adapter.py",
+            "services/orchestrator/adapters/opencode/command_builder.py",
+            "config/adapters/opencode.json"
+          ],
+          "success_criteria": [
+            "All methods execute `opencode run` subprocess in repo directory",
+            "string.Template with $variable syntax",
+            "Temp file + stdout fallback for output capture",
+            "RunRecord created/d updated via run service",
+            "No risk flagging in adapter — removed",
+            "Timeouts enforced from config"
+          ]
+        },
+        {
+          "id": "3.3",
+          "title": "10 OpenCode command templates",
+          "description": "Write all 10 command templates in adapters/opencode/commands/ using $variable syntax. Each ends with @return block writing to $output_file. Context bundle per workflow-contract.json context_bundle_rules. Discovered via filesystem glob.",
+          "files_touched": [
+            "adapters/opencode/commands/audit-existing-app.md",
+            "adapters/opencode/commands/generate-master-plan.md",
+            "adapters/opencode/commands/sharpen-plan.md",
+            "adapters/opencode/commands/generate-phase-plan.md",
+            "adapters/opencode/commands/build-phase.md",
+            "adapters/opencode/commands/review-phase.md",
+            "adapters/opencode/commands/test-phase.md",
+            "adapters/opencode/commands/fix-findings.md",
+            "adapters/opencode/commands/generate-handoff.md",
+            "adapters/opencode/commands/summarize-state.md"
+          ],
+          "success_criteria": [
+            "Each file is a valid OpenCode command",
+            "$variable context placeholders match workflow-contract.json context_bundle_rules",
+            "@return block writes to $output_file",
+            "Discovered via filesystem glob"
+          ]
+        },
+        {
+          "id": "3.4",
+          "title": "Wire adapter into API — action execution with run tracking",
+          "description": "POST /actions/{action} full pipeline for Phase 3: receives action name and confirmed flag. If action_type is 'adapter': (1) check action is valid for stage, (2) if risk_category exists and confirmed!=true, return confirmation_required with risk_explanation from policy engine (no state change, no RunRecord), (3) if confirmed or no risk_category, check single-active-run lock, (4) create RunRecord (status=queued → running), (5) assemble context bundle per workflow-contract.json context_bundle_rules, compute command_context_hash, (6) call adapter method, (7) on adapter success: persist artifact via atomic file store, update state machine, log event, complete RunRecord (status=succeeded). On failure: complete RunRecord (status=failed), transition to blocked state, log event. On adapter timeout: complete RunRecord (status=timed_out). Backend is the safety authority — the confirmed flag is validated against the action's risk_category from actions.json, independent of what the UI displayed.",
+          "files_touched": [
+            "services/orchestrator/api/actions.py",
+            "services/orchestrator/services/action_service.py"
+          ],
+          "success_criteria": [
+            "Risky action without confirmation returns needs_approval (200, no state change)",
+            "Confirmed risky or non-risky action dispatches through full pipeline",
+            "RunRecord created and completed around adapter call",
+            "Single-active-run lock rejects concurrent dispatches"
+          ]
+        },
+        {
+          "id": "3.5",
+          "title": "Adapter tests with mocked subprocess",
+          "description": "pytest with mock subprocess.Popen. Test each method: success, failure, timeout. Test command builder with context bundle inputs. Test that AdapterResult does NOT carry risk flags (verify removed). Test RunRecord integration. Test missing template detection.",
+          "files_touched": [
+            "services/orchestrator/tests/test_adapter_interface.py",
+            "services/orchestrator/tests/test_opencode_adapter.py",
+            "services/orchestrator/tests/test_command_builder.py"
+          ],
+          "success_criteria": [
+            "All methods tested for success/failure/timeout",
+            "AdapterResult has no risk fields — confirmed in test",
+            "RunRecord creation verified in test",
+            "Missing template detected at command-build time"
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_004",
+      "phase_name": "Artifacts and Timeline — Full Rendering and History",
+      "summary": "Build all 10 type-specific artifact renderers, stage-aware auto-selection logic, empty-state cards with stage-aware messages, and paginated project timeline with level filtering. No console shell changes — this phase fills in the placeholder areas from Phase 2.",
+      "estimated_complexity": "medium",
+      "dependencies": ["phase_002", "phase_003"],
+      "deliverable": "All 10 artifact types render as formatted plain English cards. Auto-selection maps stages to artifacts. Empty states explain what action to take. Timeline shows 50 events/page with level filtering and Load more.",
+      "success_criteria": [
+        "Every artifact type from workflow-contract.json renders as a formatted plain English card",
+        "Artifact panel auto-selects correct artifact for current stage via data-driven mapping",
+        "All artifacts read-only — only Scope is editable (in scope_ready stage)",
+        "Empty states show stage-aware message with suggested next action",
+        "Timeline shows 50 events/page with Load more button",
+        "Timeline supports level filter (All / Project / Phase) tabs"
+      ],
+      "sub_tasks": [
+        {
+          "id": "4.1",
+          "title": "10 artifact renderers and empty-state cards",
+          "description": "Build a renderer component per artifact type: Scope, MasterPlan, SharpeningNotes, PhasePlan, BuildSummary, ReviewFindings, TestResults, Handoff, PhaseQueue, EventLog. Each formats JSON as a readable card with sections and bullet points. Registry pattern. Scope: editable textarea in scope_ready, read-only card otherwise. Empty state: stage-aware card with plain English message telling builder what action creates this artifact.",
+          "files_touched": [
+            "apps/web/src/components/artifacts/artifact-registry.tsx",
+            "apps/web/src/components/artifacts/scope-renderer.tsx",
+            "apps/web/src/components/artifacts/master-plan-renderer.tsx",
+            "apps/web/src/components/artifacts/sharpening-notes-renderer.tsx",
+            "apps/web/src/components/artifacts/phase-plan-renderer.tsx",
+            "apps/web/src/components/artifacts/build-summary-renderer.tsx",
+            "apps/web/src/components/artifacts/review-findings-renderer.tsx",
+            "apps/web/src/components/artifacts/test-results-renderer.tsx",
+            "apps/web/src/components/artifacts/handoff-renderer.tsx",
+            "apps/web/src/components/artifacts/phase-queue-renderer.tsx",
+            "apps/web/src/components/artifacts/event-log-renderer.tsx",
+            "apps/web/src/components/artifacts/empty-state.tsx"
+          ],
+          "success_criteria": [
+            "Each renderer formats its artifact type correctly",
+            "Empty states show helpful messages",
+            "Registry selects correct renderer by type",
+            "Scope toggles between editable textarea and read-only card based on stage"
+          ]
+        },
+        {
+          "id": "4.2",
+          "title": "Stage-to-artifact auto-selection",
+          "description": "Data-driven mapping: stage → artifact type. Fallback to empty state if artifact doesn't exist. Single JSON mapping file. Selection runs on every state poll update.",
+          "files_touched": [
+            "apps/web/src/hooks/use-current-artifact.ts",
+            "apps/web/src/lib/artifact-stage-mapping.ts"
+          ],
+          "success_criteria": [
+            "Correct artifact auto-selects for every state",
+            "Data-driven mapping file",
+            "Missing artifacts show empty state, not a crash"
+          ]
+        },
+        {
+          "id": "4.3",
+          "title": "Paginated timeline with level filtering",
+          "description": "Timeline view: 50 events per page from GET /events with offset pagination. 'Load more' button. Level filter tabs: All, Project, Phase. Each entry: timestamp, plain English description, stage Badge, phase indicator. Grouped by date, most recent first.",
+          "files_touched": [
+            "apps/web/src/components/project-timeline.tsx",
+            "apps/web/src/hooks/use-events.ts"
+          ],
+          "success_criteria": [
+            "50 events per page with Load more",
+            "Level filter works (All / Project / Phase)",
+            "Most recent first, grouped by date"
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_005",
+      "phase_name": "Approval System — Risk Definitions and Confirmation UI",
+      "summary": "Build the policy engine (risk category definitions and explanation generation), add audit events for approval/rejection decisions, polish the UI confirmation dialog (accessibility, keyboard shortcuts, verbatim rendering), and write approval acceptance tests. The backend enforcement gate was already built in Phase 3 (task 3.4). The UI dialog shell was built in Phase 2 (task 2.3). This phase closes the loop: shared policy explanations, audit trail, and quality polish.",
+      "estimated_complexity": "medium",
+      "dependencies": ["phase_002", "phase_003"],
+      "deliverable": "Centralized risk category definitions in policies.json. Policy engine generates risk explanations used by both API and UI. All approval/ rejection decisions have audit events. UI dialog is polished with keyboard shortcuts, accessible ARIA labels, and verbatim rendering. Acceptance tests verify the full approval flow.",
+      "success_criteria": [
+        "Policy engine provides get_risk_explanation() used by both API and UI",
+        "Audit events logged for every approval and rejection decision",
+        "UI dialog renders risk_explanation verbatim from backend",
+        "Dialog has Enter=approve, Escape=reject keyboard shortcuts",
+        "Dialog is accessible (ARIA labels, focus trap)",
+        "Approval acceptance tests pass (full flow: API enforcement + UI dialog)"
+      ],
+      "sub_tasks": [
+        {
+          "id": "5.1",
+          "title": "Policy engine — risk category definitions and explanation generation",
+          "description": "Build a lightweight policy module that loads risk category definitions from config/policies.json. Each category has: name, description, default_explanation template. The engine provides a function: get_risk_explanation(action_name, action_config) → plain English string. This shared function is called by the API action endpoint (built in Phase 3.4) to populate confirmation_required responses, and by the UI to render the dialog. No adapter output inspection — purely config-driven.",
+          "files_touched": [
+            "services/orchestrator/policies/__init__.py",
+            "services/orchestrator/policies/engine.py",
+            "config/policies.json"
+          ],
+          "success_criteria": [
+            "Policy engine loads categories from policies.json",
+            "get_risk_explanation returns correct plain English text",
+            "No adapter output inspection — purely config-driven",
+            "Same function consumed by both API and UI"
+          ]
+        },
+        {
+          "id": "5.2",
+          "title": "Approval audit events and event logging",
+          "description": "Add event logging for approval decisions. When a user approves (submits confirmed:true) or abandons a risky action (closes dialog without approving), log an event with level=phase, event=action_confirmed or event=action_dismissed, description in plain English. The confirmation_required response from Phase 3.4 is already correct — this task adds the audit trail around it.",
+          "files_touched": [
+            "services/orchestrator/services/action_service.py",
+            "services/orchestrator/api/actions.py"
+          ],
+          "success_criteria": [
+            "Approval events logged with correct level and description",
+            "Dismissal events logged when builder rejects without approving",
+            "Events appear in project timeline"
+          ]
+        },
+        {
+          "id": "5.3",
+          "title": "UI dialog polish — keyboard, accessibility, verbatim rendering",
+          "description": "Phase 2.3 built the basic dialog shell. This task polishes it: ensure risk_explanation renders verbatim from the backend's policy engine (not hardcoded), hook up Enter=approve and Escape=reject keyboard shortcuts, add ARIA labels and focus trap for accessibility, and ensure the rejection message clearly states 'Nothing happened — you can try again or choose a different action.' Also ensure that when the backend returns adapter_not_available (Phase 1/early Phase 3) the dialog shows a clear message rather than a confusing error.",
+          "files_touched": [
+            "apps/web/src/components/risk-confirmation-dialog.tsx"
+          ],
+          "success_criteria": [
+            "risk_explanation renders verbatim from backend response",
+            "Enter approves, Escape rejects",
+            "Rejection message clear: 'Nothing happened — you can try again or choose a different action'",
+            "adapter_not_available shown clearly if backend returns it",
+            "Dialog accessible (ARIA labels, focus trap)"
+          ]
+        },
+        {
+          "id": "5.4",
+          "title": "Approval acceptance tests",
+          "description": "Write tests covering the full approval flow: (1) API-level: POST risky action without confirmed → confirmation_required, POST with confirmed → dispatches, POST non-risky → dispatches directly. (2) UI-level: dialog appears for risky actions, dialog does not appear for non-risky, approve and reject paths work. (3) Backend safety authority: verify that even if a client sends confirmed:true for an action with no risk_category, the request is processed normally (confirmed flag is ignored for non-risky actions). (4) Verify backend rejects an action if confirmed:true is sent for a risky action that doesn't exist in the current stage.",
+          "files_touched": [
+            "services/orchestrator/tests/test_approval_gate.py",
+            "apps/web/src/__tests__/risk-confirmation-dialog.test.tsx"
+          ],
+          "success_criteria": [
+            "All four test scenarios pass",
+            "Backend safety authority verified — UI bypass impossible",
+            "Confirmed flag ignored for non-risky actions"
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_006",
+      "phase_name": "Existing App Mode — App Audit and Context Injection",
+      "summary": "Implement Existing App Mode: 5-section app audit, existing-app project initialization, audit context injection into master plan and phase plans. Git not required. Works on any directory.",
+      "estimated_complexity": "medium",
+      "dependencies": ["phase_001", "phase_003"],
+      "deliverable": "Builder can point FlowBench at any directory, run an audit, write a scope for an improvement, and complete the full project loop with audit context preserving existing code.",
+      "success_criteria": [
+        "App audit produces 5-section report (framework, dir structure, entry points, dependencies, tests)",
+        "Git not required — works on any directory of files",
+        "Mode toggle switches between new_build and existing_app",
+        "Audit context injected into master plan prompts in existing_app mode only",
+        "New_build mode never includes audit context"
+      ],
+      "sub_tasks": [
+        {
+          "id": "6.1",
+          "title": "App audit service — 5-section read-only scan",
+          "description": "Implement the app audit. Produces exactly 5 sections: (1) Project type/framework detected, (2) Directory structure (top 3 levels), (3) Entry points and key files, (4) Dependencies (from package files, pyproject.toml, Cargo.toml, etc.), (5) Existing tests (framework and count). No function-level analysis. Git optional — note commit and branch if present. Read-only — never writes to the repo.",
+          "files_touched": [
+            "services/orchestrator/services/audit_service.py"
+          ],
+          "success_criteria": [
+            "Exactly 5 sections produced",
+            "<30 seconds for repos under 10k files",
+            "Git optional — works on any directory"
+          ]
+        },
+        {
+          "id": "6.2",
+          "title": "Existing app mode project initialization",
+          "description": "Extend project init for existing_app mode. Builder provides repo path. Backend validates directory exists, runs audit automatically, saves as first artifact. Mode persisted in current-state.json. Mode change triggers re-audit.",
+          "files_touched": [
+            "services/orchestrator/services/project_service.py",
+            "services/orchestrator/api/state.py"
+          ],
+          "success_criteria": [
+            "existing_app mode creates project with audit artifact",
+            "Path validation rejects non-existent paths",
+            "Mode change triggers re-audit"
+          ]
+        },
+        {
+          "id": "6.3",
+          "title": "Context bundle integration for existing app mode",
+          "description": "In the command_builder, when in existing_app mode and audit exists, prepend audit report as 'Current Project State' section to the context bundle for generate_master_plan and generate_phase_plan. Follow context_bundle_rules from workflow-contract.json. Single conditional in command_builder.",
+          "files_touched": [
+            "services/orchestrator/adapters/opencode/command_builder.py",
+            "services/orchestrator/services/context_service.py"
+          ],
+          "success_criteria": [
+            "existing_app mode prompts include audit context in correct actions",
+            "new_build mode prompts never include audit context",
+            "Context assembly follows workflow-contract.json context_bundle_rules"
+          ]
+        }
+      ]
+    },
+    {
+      "phase_id": "phase_007",
+      "phase_name": "Polish and Defaults — CLI, Recovery UI, Safety, and Documentation",
+      "summary": "Create the flowbench CLI, interrupted-run recovery UI, blocked state explanations, safety constraints enforcement, structured error responses, golden-path acceptance tests, and all documentation. Everything needed for a non-technical user to install and start.",
+      "estimated_complexity": "medium",
+      "dependencies": ["phase_001", "phase_002", "phase_003", "phase_004", "phase_005", "phase_006"],
+      "deliverable": "A non-technical user can pip install flowbench && flowbench start and follow the README to complete their first project.",
+      "success_criteria": [
+        "flowbench start launches both servers; flowbench status prints readable state",
+        "Interrupted runs detected on startup with recovery prompt (never auto-rerun)",
+        "Blocked states explain why and list recovery actions",
+        "All errors return structured responses with plain English messages + suggested action",
+        "Safety constraints enforced (127.0.0.1, path validation, symlink resolution, artifact boundary)",
+        "Golden-path acceptance tests pass (new build, existing app, interrupted recovery, approval gate, invalid transition)",
+        "README: 5-step install, understandable by non-technical user",
+        "AGENTS.md: OpenCode rules for building FlowBench",
+        "CONTRIBUTING.md: adapter guide with worked example",
+        "Install script verifies prerequisites, does not install anything"
+      ],
+      "sub_tasks": [
+        {
+          "id": "7.1",
+          "title": "Single flowbench CLI",
+          "description": "Python CLI via click (stdlib + click only). Commands: flowbench start — launches uvicorn backend + Next.js dev server; flowbench status — reads ~/.flowbench/current-state.json, prints plain English summary; flowbench help. Entry point in pyproject.toml console_scripts.",
+          "files_touched": [
+            "services/orchestrator/cli.py",
+            "pyproject.toml"
+          ],
+          "success_criteria": [
+            "flowbench start launches both servers",
+            "flowbench status prints readable state",
+            "Minimal dependencies (stdlib + click)"
+          ]
+        },
+        {
+          "id": "7.2",
+          "title": "Interrupted-run recovery UI",
+          "description": "On app startup, check GET /runs/active for interrupted runs. If found, show recovery prompt as a banner/overlay: 'Work may have stopped unexpectedly. Some changes may already exist. Choose what to do:' with options: 'Inspect current state' (reads latest artifacts), 'Retry the last action' (re-dispatches with same context), 'Continue from current state' (clears interrupted status, moves on), 'Revise the plan' (navigates to re-plan). Never auto-rerun.",
+          "files_touched": [
+            "apps/web/src/components/recovery-banner.tsx",
+            "apps/web/src/hooks/use-run-state.ts"
+          ],
+          "success_criteria": [
+            "Interrupted run detected on app startup",
+            "Recovery prompt shows all four options",
+            "No auto-rerun",
+            "Each option triggers correct API call"
+          ]
+        },
+        {
+          "id": "7.3",
+          "title": "Blocked state UI with recovery actions",
+          "description": "For project_blocked and phase_blocked states: render a clear plain English explanation (from the RunRecord failure_message or event log), list the available recovery actions from the current state's actions in workflow-contract.json. Blocked states always have at least one recovery option.",
+          "files_touched": [
+            "apps/web/src/components/blocked-state.tsx"
+          ],
+          "success_criteria": [
+            "Blocked state shows explanation + recovery actions",
+            "No raw error messages",
+            "At least one recovery action always visible"
+          ]
+        },
+        {
+          "id": "7.4",
+          "title": "Structured error responses",
+          "description": "Audit all API endpoints. Every error returns: {status: 'error', message: plain English, suggested_action: plain English, error_code: string}. FastAPI exception handlers for 400, 404, 422, 500. No raw Python tracebacks. ErrorResponse Pydantic schema.",
+          "files_touched": [
+            "services/orchestrator/api/error_handlers.py",
+            "services/orchestrator/schemas/errors.py"
+          ],
+          "success_criteria": [
+            "Structured errors with message + suggested_action everywhere",
+            "No tracebacks exposed to client"
+          ]
+        },
+        {
+          "id": "7.5",
+          "title": "Settings screen — health indicator and new project flow",
+          "description": "Complete settings: adapter health indicator (green/red dot with tooltip from adapter health_check()), policy toggles per risk category, repo path input with directory validation, mode toggle. Modal 'Start new project' flow: name → mode → path (if existing app) → confirm → creates state at scope_ready.",
+          "files_touched": [
+            "apps/web/src/components/settings-screen.tsx",
+            "apps/web/src/components/new-project-flow.tsx"
+          ],
+          "success_criteria": [
+            "Health indicator functional with error tooltip",
+            "New project flow creates project end-to-end"
+          ]
+        },
+        {
+          "id": "7.6",
+          "title": "Safety constraints enforcement",
+          "description": "Bind FastAPI to 127.0.0.1 (config-driven). Validate and normalize repo paths: resolve symlinks, reject paths outside allowed directories. Restrict artifact writes to ~/.flowbench/ directory tree. Sanitize artifact content before rendering (escape HTML). Never persist secrets in prompts, artifacts, or logs. Record command template version and working directory in every RunRecord.",
+          "files_touched": [
+            "services/orchestrator/main.py (127.0.0.1 bind, path validation)",
+            "services/orchestrator/store/file_store.py (artifact boundary enforcement)",
+            "services/orchestrator/api/middleware.py (path sanitization)"
+          ],
+          "success_criteria": [
+            "Server binds to 127.0.0.1 only",
+            "Invalid paths rejected with explanation",
+            "Artifact writes outside ~/.flowbench/ rejected",
+            "Artifact content escaped before rendering",
+            "Template version and cwd recorded in RunRecord"
+          ]
+        },
+        {
+          "id": "7.7",
+          "title": "Golden-path acceptance tests",
+          "description": "Write the 6 golden-path tests defined in workflow-contract.json: (1) new_build_golden_path, (2) existing_app_golden_path, (3) interrupted_run_recovery, (4) approval_gate, (5) invalid_transition_rejected, (6) adapter_action_unavailable_in_phase1. Mock OpenCode for all. One manual real-OpenCode smoke test script for release readiness.",
+          "files_touched": [
+            "services/orchestrator/tests/test_golden_paths.py",
+            "scripts/smoke-test.sh"
+          ],
+          "success_criteria": [
+            "All 6 golden-path tests pass with mocked adapter",
+            "Each test covers exactly the steps in workflow-contract.json",
+            "Smoke test script runs a real OpenCode command and validates output"
+          ]
+        },
+        {
+          "id": "7.8",
+          "title": "README — 5-step installation",
+          "description": "What FlowBench is (1 paragraph), who it's for (1 paragraph). Prerequisites: Node.js 20+, Python 3.11+, OpenCode CLI. Exactly 5 numbered steps. First project walkthrough. Plain English. Assume reader has never opened a terminal.",
+          "files_touched": [
+            "README.md"
+          ],
+          "success_criteria": [
+            "5 numbered steps",
+            "Understandable by non-technical user",
+            "Complete first project walkthrough"
+          ]
+        },
+        {
+          "id": "7.9",
+          "title": "AGENTS.md",
+          "description": "OpenCode rules for building FlowBench: project structure, code style (ruff, eslint), test commands (pytest, vitest), build phases list, reference to workflow-contract.json as authoritative source, 'built using its own methodology' reminder.",
+          "files_touched": [
+            "AGENTS.md"
+          ],
+          "success_criteria": [
+            "Follows OpenCode format",
+            "All conventions documented"
+          ]
+        },
+        {
+          "id": "7.10",
+          "title": "CONTRIBUTING.md",
+          "description": "Adapter-focused: ExecutionAdapter interface, context bundle rules from workflow-contract.json, string.Template pattern, filesystem glob discovery, config registration, worked example (echo adapter). 2-3 pages.",
+          "files_touched": [
+            "CONTRIBUTING.md"
+          ],
+          "success_criteria": [
+            "New adapter implementable from guide alone",
+            "Worked example is complete"
+          ]
+        },
+        {
+          "id": "7.11",
+          "title": "Prerequisite verification script",
+          "description": "scripts/install.sh: checks node >=20, python3 >=3.11, opencode, uv, pnpm. Green checkmarks or red X's. Copy-pasteable install commands for missing tools. Does not modify system. Linux/macOS.",
+          "files_touched": [
+            "scripts/install.sh"
+          ],
+          "success_criteria": [
+            "Clear pass/fail for each prerequisite",
+            "Install commands for missing tools",
+            "No system modification"
+          ]
+        }
+      ]
+    }
+  ],
+  "golden_path_tests": [
+    {
+      "name": "new_build_golden_path",
+      "description": "Full lifecycle: init → scope → master plan → sharpen → accept → phase plan → build → review → test → handoff → complete. Includes simulated restart mid-process.",
+      "reference": "workflow-contract.json → golden_path_tests[0]"
+    },
+    {
+      "name": "existing_app_golden_path",
+      "description": "Existing app mode: init with temp repo → audit → scope → plan → one full phase.",
+      "reference": "workflow-contract.json → golden_path_tests[1]"
+    },
+    {
+      "name": "interrupted_run_recovery",
+      "description": "Simulate mid-run crash → restart → verify interrupted detection → verify recovery prompt (no auto-rerun).",
+      "reference": "workflow-contract.json → golden_path_tests[2]"
+    },
+    {
+      "name": "approval_gate",
+      "description": "Risky action → confirmation required → reject (no state change) → approve (action dispatches).",
+      "reference": "workflow-contract.json → golden_path_tests[3]"
+    },
+    {
+      "name": "invalid_transition_rejected",
+      "description": "Invalid action for current state → 400 with explanation → state unchanged.",
+      "reference": "workflow-contract.json → golden_path_tests[4]"
+    },
+    {
+      "name": "adapter_action_unavailable_in_phase1",
+      "description": "Verify adapter-backed actions return adapter_not_available before Phase 3.",
+      "reference": "workflow-contract.json → golden_path_tests[5]"
+    }
+  ]
+}

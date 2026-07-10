@@ -1,0 +1,1083 @@
+{
+  "contract_version": "1.0.0",
+  "generated_at": "2026-07-10T00:00:00Z",
+  "purpose": "Authoritative source of truth for every state, transition, action, artifact, and event in FlowBench. Validates workflows.json, actions.json, state-machine tests, API responses, and UI rendering.",
+  "notes": [
+    "Approval model: stage-level only. Risk categories are declared per-action in actions.json, not detected from adapter output. Approval is a pre-dispatch gate — the builder confirms the category of risk before the adapter runs.",
+    "Recovery: every terminal or blocked state has at least one recovery action. No dead ends.",
+    "Run persistence: every adapter-backed action creates a RunRecord. Interrupted runs are detected on startup and surfaced to the builder.",
+    "Phase 2 = console shell only. Phase 4 = all artifact renderers and timeline. No overlap.",
+    "Backend is the safety authority for approval. The UI is a convenience layer. A risky action is never accepted merely because a client claims it was previously displayed in a confirmation dialog. The backend independently checks the confirmed flag against the configured risk_category for the requested action.",
+    "Phase 1 does not implement adapter-backed actions. POST /actions for adapter-backed actions returns adapter_not_available until Phase 3. Only state-only actions (action_type: system or navigation) work in Phase 1."
+  ],
+  "artifact_layout": {
+    "description": "V1 layout: all FlowBench state lives in a single .flowbench/ directory inside the selected project repo. No project-name subdirectory. Flat artifact namespace (phase-specific artifacts use phase-<id> suffixes). This layout is locked for V1 — a future multi-project feature requires a separate scope decision and must not leak its structure into V1.",
+    "path": "<selected-project-repo>/.flowbench/",
+    "contents": {
+      "current-state.json": "Current project and phase state, selected repo path, project display name, adapter name, timestamps",
+      "scope.json": "The scope document",
+      "master-plan.json": "The accepted master plan",
+      "sharpening-notes.json": "Master plan sharpening history",
+      "phase-queue.json": "Ordered phase queue with statuses",
+      "events.ndjson": "Append-only event log, one compact JSON object per line",
+      "runs/<run-id>.json": "Per-run records",
+      "approvals.json": "Approval decision history",
+      "phase-plan-<phase-id>.json": "Detailed plan for a specific phase",
+      "build-summary-<phase-id>.json": "Results of a phase build",
+      "review-findings-<phase-id>.json": "Review output for a phase",
+      "test-results-<phase-id>.json": "Test output for a phase",
+      "handoff-<phase-id>.json": "Handoff notes for a phase",
+      "audit.json": "Existing-app audit (present only in existing_app mode)",
+      "decision-<id>.json": "Decision artifacts for skips, overrides, cancellations"
+    },
+    "rules": [
+      "All FlowBench writes stay within .flowbench/ in the selected repository. No writes outside this directory tree.",
+      "current-state.json carries the selected repository's normalized absolute path and a project display name.",
+      "No project-name subdirectory under .flowbench/ in V1.",
+      "Phase-specific artifacts use the pattern <type>-<phase-id>.json (e.g., phase-plan-phase_003.json).",
+      "The selected repository is the project boundary. Switching repos is equivalent to starting a new project.",
+      "A future multi-project feature must be a separate scope decision and must define its own layout. Do not reserve structure for it now."
+    ]
+  },
+  "safety_constraints": [
+    "Bind FastAPI to 127.0.0.1 only",
+    "Validate and normalize repo paths before use; resolve symlinks",
+    "All artifact writes restricted to .flowbench/ directory inside the selected project repo",
+    "Never persist secrets in artifacts, prompts, logs, or UI messages",
+    "Treat all artifact content as untrusted text when rendering (escape HTML)",
+    "Record command template version and working directory in each RunRecord",
+    "Atomic writes: write temp file → fsync → rename into place",
+    "Events appended only after durable artifact write succeeds"
+  ],
+  "phase_management_rules": [
+    "Only upcoming phases can be reordered",
+    "A phase cannot move ahead of an unmet dependency (phases are sequential in V1 — reorder is a V1 UI affordance but the queue is always processed in order)",
+    "Skipping a phase requires a plain-English reason recorded in a decision artifact",
+    "Skipped phases remain visible in the queue with status: skipped",
+    "Skipped phases can be restored to upcoming status before project_complete",
+    "Any reorder or skip action creates an event log entry and a decision artifact",
+    "Override-and-continue in review/test requires a plain-English reason recorded in a decision artifact"
+  ],
+  "sharpness_criteria": {
+    "description": "A master plan or phase plan is considered sharp (ready for acceptance) only when ALL of these are true:",
+    "criteria": [
+      "The goal is clearly stated",
+      "Non-goals are explicitly listed",
+      "Dependencies are known and documented",
+      "Acceptance checks are concrete and testable",
+      "Builder decisions required during this phase are listed separately",
+      "Existing behavior to preserve is stated (in existing-app mode)",
+      "The next action after this plan is obvious",
+      "Unresolved blockers are either cleared or explicitly called out with their impact"
+    ]
+  },
+  "states": {
+    "starting": {
+      "label": "Getting started",
+      "level": "project",
+      "on_entry_artifact": null,
+      "actions": {
+        "start_new_project": {
+          "label": "Start new project",
+          "description": "Create a new project from scratch",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "scope_ready",
+          "artifact_created": "scope.md (initialized empty)",
+          "event_emitted": "project_created",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "load_existing_project": {
+          "label": "Load existing app",
+          "description": "Point to an existing codebase and audit it",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "scope_ready",
+          "artifact_created": "audit.json (if existing app mode)",
+          "event_emitted": "project_loaded_existing",
+          "adapter_action": "audit_existing_app",
+          "recovery": "audit failed → retry with different path or switch to new build",
+          "action_type": "adapter"
+        },
+        "change_backend": {
+          "label": "Change backend",
+          "description": "Switch the execution adapter",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "starting",
+          "artifact_created": null,
+          "event_emitted": "backend_changed",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "scope_ready": {
+      "label": "Scope is ready",
+      "level": "project",
+      "on_entry_artifact": "scope",
+      "actions": {
+        "generate_master_plan": {
+          "label": "Generate master plan",
+          "description": "Create a full project plan from your scope",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": ["scope has content"],
+          "target_state": "master_plan_drafting",
+          "artifact_created": "master-plan.json",
+          "event_emitted": "master_plan_generation_started",
+          "adapter_action": "generate_master_plan",
+          "recovery": "generation failed → retry or edit scope",
+          "action_type": "adapter"
+        },
+        "edit_scope": {
+          "label": "Edit scope",
+          "description": "Update your app idea description",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "scope_ready",
+          "artifact_created": "scope.md (updated)",
+          "event_emitted": "scope_edited",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "cancel_project": {
+          "label": "Cancel project",
+          "description": "Stop working on this project",
+          "risk_category": "destructive",
+          "risk_explanation": "This will mark the project as cancelled. All artifacts and history are preserved but the project will be considered complete.",
+          "preconditions": [],
+          "target_state": "project_complete",
+          "artifact_created": null,
+          "event_emitted": "project_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "master_plan_drafting": {
+      "label": "Creating the master plan",
+      "level": "project",
+      "on_entry_artifact": "master-plan",
+      "actions": {
+        "_auto_transition": {
+          "description": "On adapter completion, transitions automatically to master_plan_sharpening or project_blocked",
+          "target_state_on_success": "master_plan_sharpening",
+          "target_state_on_failure": "project_blocked"
+        },
+        "refine_plan": {
+          "label": "Refine the plan",
+          "description": "Re-generate the master plan with updated context",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "master_plan_drafting",
+          "artifact_created": "master-plan.json (updated)",
+          "event_emitted": "master_plan_refinement_started",
+          "adapter_action": "generate_master_plan",
+          "recovery": null,
+          "action_type": "adapter"
+        }
+      },
+      "events": {
+        "draft_complete": {
+          "target_state": "master_plan_sharpening"
+        },
+        "draft_failed": {
+          "target_state": "project_blocked"
+        }
+      }
+    },
+    "master_plan_sharpening": {
+      "label": "Refining the master plan",
+      "level": "project",
+      "on_entry_artifact": "sharpening-notes",
+      "actions": {
+        "sharpen_plan": {
+          "label": "Refine the plan",
+          "description": "Ask the agent to review the plan and surface ambiguities or missing context",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "master_plan_sharpening",
+          "artifact_created": "sharpening-notes.json (updated)",
+          "event_emitted": "master_plan_sharpening_iteration",
+          "adapter_action": "sharpen_plan",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "accept_master_plan": {
+          "label": "Accept the plan",
+          "description": "Mark the master plan as sharp and proceed to phase execution",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": ["sharpness criteria met"],
+          "target_state": "phase_queue_ready",
+          "artifact_created": "phase-queue.json (initialized from master plan decomposition)",
+          "event_emitted": "master_plan_accepted",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "cancel_project": {
+          "label": "Cancel project",
+          "description": "Stop working on this project",
+          "risk_category": "destructive",
+          "risk_explanation": "This will mark the project as cancelled. All artifacts and history are preserved.",
+          "preconditions": [],
+          "target_state": "project_complete",
+          "artifact_created": null,
+          "event_emitted": "project_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_queue_ready": {
+      "label": "Ready to start phases",
+      "level": "project",
+      "on_entry_artifact": "phase-queue",
+      "actions": {
+        "start_next_phase": {
+          "label": "Start next phase",
+          "description": "Begin working on the first upcoming phase",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": ["there is an upcoming phase"],
+          "target_state": "phase_in_progress",
+          "artifact_created": null,
+          "event_emitted": "phase_started",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "view_all_phases": {
+          "label": "View all phases",
+          "description": "See the full phase queue",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": null,
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "navigation"
+        },
+        "reorder_phases": {
+          "label": "Re-order phases",
+          "description": "Change the order of upcoming phases",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": ["there are at least 2 upcoming phases"],
+          "target_state": "phase_queue_ready",
+          "artifact_created": "phase-queue.json (reordered)",
+          "event_emitted": "phases_reordered",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      },
+      "events": {
+        "all_phases_complete": {
+          "target_state": "project_complete"
+        }
+      }
+    },
+    "phase_in_progress": {
+      "label": "Phase in progress",
+      "level": "project",
+      "on_entry_artifact": null,
+      "actions": {},
+      "note": "This is a passthrough state. The active phase's state machine governs actual behavior. The project-level display shows 'A phase is in progress' and the current phase name."
+    },
+    "phase_handoff": {
+      "label": "Reviewing phase handoff",
+      "level": "project",
+      "on_entry_artifact": "handoff",
+      "actions": {
+        "accept_handoff": {
+          "label": "Accept handoff",
+          "description": "Mark this phase as complete and return to the phase queue",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "handoff_accepted",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "project_blocked": {
+      "label": "Project needs attention",
+      "level": "project",
+      "on_entry_artifact": null,
+      "actions": {
+        "replan_from_here": {
+          "label": "Re-plan from here",
+          "description": "Go back to the master plan and revise it",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "master_plan_sharpening",
+          "artifact_created": null,
+          "event_emitted": "project_replanned",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "revise_scope": {
+          "label": "Revise scope",
+          "description": "Go back to the scope and change what you want to build",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "scope_ready",
+          "artifact_created": null,
+          "event_emitted": "scope_revision_started",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "cancel_project": {
+          "label": "Cancel project",
+          "description": "Stop working on this project",
+          "risk_category": "destructive",
+          "risk_explanation": "This will mark the project as cancelled. All artifacts and history are preserved.",
+          "preconditions": [],
+          "target_state": "project_complete",
+          "artifact_created": null,
+          "event_emitted": "project_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "project_complete": {
+      "label": "Project complete",
+      "level": "project",
+      "on_entry_artifact": null,
+      "actions": {
+        "view_summary": {
+          "label": "View summary",
+          "description": "See the full project summary",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "project_complete",
+          "artifact_created": null,
+          "event_emitted": null,
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "navigation"
+        },
+        "archive_project": {
+          "label": "Archive project",
+          "description": "Save the project state and start fresh",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "project_complete",
+          "artifact_created": null,
+          "event_emitted": "project_archived",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "start_new_project": {
+          "label": "Start a new project",
+          "description": "Begin a new project (archives current one)",
+          "risk_category": "destructive",
+          "risk_explanation": "Starting a new project will archive the current project. Current project artifacts are preserved but it will no longer be active.",
+          "preconditions": [],
+          "target_state": "starting",
+          "artifact_created": null,
+          "event_emitted": "new_project_started",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_starting": {
+      "label": "Preparing phase",
+      "level": "phase",
+      "on_entry_artifact": "phase-queue",
+      "actions": {
+        "generate_phase_plan": {
+          "label": "Generate phase plan",
+          "description": "Create a detailed plan for this phase only",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_plan",
+          "artifact_created": "phase-plan.json",
+          "event_emitted": "phase_plan_generation_started",
+          "adapter_action": "generate_phase_plan",
+          "recovery": "generation failed → retry",
+          "action_type": "adapter"
+        },
+        "skip_phase": {
+          "label": "Skip this phase",
+          "description": "Skip this phase and move to the next one",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_complete",
+          "artifact_created": "decision.json (reason for skip)",
+          "event_emitted": "phase_skipped",
+          "adapter_action": null,
+          "recovery": "skipped phases can be restored to upcoming before project_complete",
+          "action_type": "system"
+        },
+        "cancel_phase": {
+          "label": "Cancel phase",
+          "description": "Cancel this phase and return to the project queue",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "phase_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_plan": {
+      "label": "Creating phase plan",
+      "level": "phase",
+      "on_entry_artifact": "phase-plan",
+      "actions": {
+        "_auto_transition": {
+          "description": "On adapter completion, transitions automatically to phase_sharpening or phase_blocked",
+          "target_state_on_success": "phase_sharpening",
+          "target_state_on_failure": "phase_blocked"
+        }
+      },
+      "events": {
+        "phase_draft_complete": {
+          "target_state": "phase_sharpening"
+        },
+        "phase_draft_failed": {
+          "target_state": "phase_blocked"
+        }
+      }
+    },
+    "phase_sharpening": {
+      "label": "Refining phase plan",
+      "level": "phase",
+      "on_entry_artifact": "sharpening-notes",
+      "actions": {
+        "sharpen_phase_plan": {
+          "label": "Sharpen this plan",
+          "description": "Ask the agent to review the phase plan for ambiguities",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_sharpening",
+          "artifact_created": "sharpening-notes.json (updated)",
+          "event_emitted": "phase_sharpening_iteration",
+          "adapter_action": "sharpen_plan",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "accept_phase_plan": {
+          "label": "Accept phase plan",
+          "description": "Mark this phase plan as sharp and prepare to build",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": ["sharpness criteria met"],
+          "target_state": "phase_ready_to_build",
+          "artifact_created": null,
+          "event_emitted": "phase_plan_accepted",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_ready_to_build": {
+      "label": "Ready to build",
+      "level": "phase",
+      "on_entry_artifact": "phase-plan",
+      "actions": {
+        "start_building": {
+          "label": "Start building",
+          "description": "Execute the phase plan — the coding agent will make changes",
+          "risk_category": "modify_files",
+          "risk_explanation": "Starting this build may create, modify, or delete files in your project directory. The coding agent will follow the approved phase plan but may make independent decisions about implementation details. Review changes after the build completes.",
+          "preconditions": [],
+          "target_state": "phase_building",
+          "artifact_created": "build-summary.json (on completion)",
+          "event_emitted": "phase_build_started",
+          "adapter_action": "build_phase",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "change_phase_plan": {
+          "label": "Change phase plan",
+          "description": "Go back and revise the phase plan",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_plan",
+          "artifact_created": null,
+          "event_emitted": "phase_plan_revision_started",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "cancel_phase": {
+          "label": "Cancel phase",
+          "description": "Cancel this phase and return to the project queue",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "phase_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_building": {
+      "label": "Building",
+      "level": "phase",
+      "on_entry_artifact": "build-summary",
+      "actions": {
+        "_auto_transition": {
+          "description": "On adapter completion, transitions to phase_reviewing (success), or phase_blocked (failure)",
+          "target_state_on_success": "phase_reviewing",
+          "target_state_on_failure": "phase_blocked"
+        },
+        "pause": {
+          "label": "Pause",
+          "description": "Stop the current build and inspect progress",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_blocked",
+          "artifact_created": null,
+          "event_emitted": "phase_build_paused",
+          "adapter_action": null,
+          "recovery": "from blocked: retry (restarts build) or re-plan",
+          "action_type": "system"
+        },
+        "ask_for_summary": {
+          "label": "Ask for a summary",
+          "description": "Get a progress update from the coding agent",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_building",
+          "artifact_created": null,
+          "event_emitted": null,
+          "adapter_action": "summarize_state",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "cancel_phase": {
+          "label": "Cancel phase",
+          "description": "Cancel this phase and return to the project queue",
+          "risk_category": "destructive",
+          "risk_explanation": "Cancelling during a build may leave partial changes in your project directory. The phase can be restarted later.",
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "phase_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      },
+      "events": {
+        "build_complete": {
+          "target_state": "phase_reviewing"
+        },
+        "build_failed": {
+          "target_state": "phase_blocked"
+        }
+      }
+    },
+    "phase_reviewing": {
+      "label": "Reviewing results",
+      "level": "phase",
+      "on_entry_artifact": "review-findings",
+      "actions": {
+        "_auto_transition": {
+          "description": "Review runs automatically on build completion. Findings are saved as review-findings.json.",
+          "adapter_action": "review_phase"
+        },
+        "accept_review": {
+          "label": "Accept review",
+          "description": "Mark the review as complete and proceed to testing",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_testing",
+          "artifact_created": null,
+          "event_emitted": "review_accepted",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "fix_findings": {
+          "label": "Fix findings",
+          "description": "Have the coding agent address review findings",
+          "risk_category": "modify_files",
+          "risk_explanation": "The coding agent will modify files to address review findings.",
+          "preconditions": [],
+          "target_state": "phase_fixing",
+          "artifact_created": null,
+          "event_emitted": "fixing_started",
+          "adapter_action": "fix_findings",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "override_and_continue": {
+          "label": "Override and continue",
+          "description": "Ignore review findings and proceed to testing",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_testing",
+          "artifact_created": "decision.json (reason for override)",
+          "event_emitted": "review_overridden",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_testing": {
+      "label": "Testing",
+      "level": "phase",
+      "on_entry_artifact": "test-results",
+      "actions": {
+        "_auto_transition": {
+          "description": "Tests run automatically. Results saved as test-results.json.",
+          "adapter_action": "test_phase"
+        },
+        "accept_test_results": {
+          "label": "Accept test results",
+          "description": "Mark tests as passing and proceed to handoff",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_handoff",
+          "artifact_created": null,
+          "event_emitted": "tests_accepted",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "fix_failures": {
+          "label": "Fix failures",
+          "description": "Have the coding agent address test failures",
+          "risk_category": "modify_files",
+          "risk_explanation": "The coding agent will modify files to fix test failures.",
+          "preconditions": [],
+          "target_state": "phase_fixing",
+          "artifact_created": null,
+          "event_emitted": "fixing_started",
+          "adapter_action": "fix_findings",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "skip_tests": {
+          "label": "Skip tests",
+          "description": "Skip testing and proceed to handoff",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_handoff",
+          "artifact_created": "decision.json (reason for skip)",
+          "event_emitted": "tests_skipped",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      },
+      "events": {
+        "tests_passed": {
+          "target_state": "phase_handoff"
+        },
+        "tests_failed": {
+          "target_state": "phase_fixing"
+        }
+      }
+    },
+    "phase_fixing": {
+      "label": "Fixing issues",
+      "level": "phase",
+      "on_entry_artifact": null,
+      "actions": {
+        "_auto_transition": {
+          "description": "On adapter completion, transitions to phase_reviewing (fix_cycle) or phase_blocked (failure)",
+          "target_state_on_success": "phase_reviewing",
+          "target_state_on_failure": "phase_blocked"
+        },
+        "pause": {
+          "label": "Pause",
+          "description": "Stop fixing and inspect the current state",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_blocked",
+          "artifact_created": null,
+          "event_emitted": "fixing_paused",
+          "adapter_action": null,
+          "recovery": "from blocked: retry or re-plan",
+          "action_type": "system"
+        },
+        "cancel_phase": {
+          "label": "Cancel phase",
+          "description": "Cancel this phase and return to the project queue",
+          "risk_category": "destructive",
+          "risk_explanation": "Cancelling during fixing may leave partial changes in your project directory.",
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "phase_cancelled",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      },
+      "events": {
+        "fix_complete": {
+          "target_state": "phase_reviewing"
+        },
+        "fix_failed": {
+          "target_state": "phase_blocked"
+        }
+      }
+    },
+    "phase_handoff": {
+      "label": "Wrapping up phase",
+      "level": "phase",
+      "on_entry_artifact": "handoff",
+      "actions": {
+        "generate_handoff": {
+          "label": "Generate handoff notes",
+          "description": "Create structured notes for the next phase",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_handoff",
+          "artifact_created": "handoff.json",
+          "event_emitted": "handoff_generated",
+          "adapter_action": "generate_handoff",
+          "recovery": "generation failed → retry",
+          "action_type": "adapter"
+        },
+        "accept_handoff": {
+          "label": "Accept handoff",
+          "description": "Mark the phase handoff as complete",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_complete",
+          "artifact_created": null,
+          "event_emitted": "handoff_accepted",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    },
+    "phase_complete": {
+      "label": "Phase complete",
+      "level": "phase",
+      "on_entry_artifact": "handoff",
+      "actions": {
+        "start_next_phase": {
+          "label": "Start next phase",
+          "description": "Begin the next phase in the queue",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": ["next phase exists"],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "next_phase_requested",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "view_handoff_notes": {
+          "label": "View handoff notes",
+          "description": "Read the handoff artifact for this phase",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_complete",
+          "artifact_created": null,
+          "event_emitted": null,
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "navigation"
+        }
+      },
+      "note": "Terminal phase state. Returns control to the project state machine (phase_queue_ready → next phase or project_complete)."
+    },
+    "phase_blocked": {
+      "label": "Phase needs attention",
+      "level": "phase",
+      "on_entry_artifact": null,
+      "actions": {
+        "retry": {
+          "label": "Retry",
+          "description": "Try the last action again",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "depends_on_prior_state",
+          "artifact_created": null,
+          "event_emitted": "phase_retried",
+          "adapter_action": "depends_on_prior_state",
+          "recovery": null,
+          "action_type": "adapter"
+        },
+        "replan_phase": {
+          "label": "Re-plan phase",
+          "description": "Go back to the phase plan and revise it",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_plan",
+          "artifact_created": null,
+          "event_emitted": "phase_replanned",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        },
+        "abandon_phase": {
+          "label": "Abandon phase",
+          "description": "Cancel this phase and return to the project queue",
+          "risk_category": "destructive",
+          "risk_explanation": "Abandoning a phase discards any uncompleted work. The phase can be restarted later.",
+          "preconditions": [],
+          "target_state": "phase_queue_ready",
+          "artifact_created": null,
+          "event_emitted": "phase_abandoned",
+          "adapter_action": null,
+          "recovery": null,
+          "action_type": "system"
+        }
+      }
+    }
+  },
+  "context_bundle_rules": {
+    "description": "For each adapter-backed action, the context bundle builder assembles the required inputs into the command prompt. Listed in order of assembly.",
+    "rules": [
+      {
+        "adapter_action": "audit_existing_app",
+        "required_context": ["repo_path"],
+        "optional_context": [],
+        "assembly_note": "Read-only scan. No context injection needed beyond the repo path."
+      },
+      {
+        "adapter_action": "generate_master_plan",
+        "required_context": ["scope"],
+        "optional_context": ["existing_app_audit"],
+        "assembly_note": "Scope is the primary input. If in existing_app mode and audit exists, prepend 'Current Project State' section before scope."
+      },
+      {
+        "adapter_action": "sharpen_plan",
+        "required_context": ["current_plan", "scope"],
+        "optional_context": ["sharpening_history", "existing_app_audit"],
+        "assembly_note": "Current plan + scope are always required. Sharpening history (previous rounds) included if available. Audit included in existing_app mode."
+      },
+      {
+        "adapter_action": "generate_phase_plan",
+        "required_context": ["master_plan", "phase_definition"],
+        "optional_context": ["prior_handoff", "existing_app_audit"],
+        "assembly_note": "Master plan + the specific phase definition. Prior phase handoff included if available. Audit included in existing_app mode."
+      },
+      {
+        "adapter_action": "build_phase",
+        "required_context": ["phase_plan", "phase_handoff"],
+        "optional_context": ["master_plan_excerpt"],
+        "assembly_note": "Approved phase plan + any prior handoff for context stability. Master plan excerpt included if relevant."
+      },
+      {
+        "adapter_action": "review_phase",
+        "required_context": ["phase_plan", "build_summary"],
+        "optional_context": [],
+        "assembly_note": "Compare what was planned against what was built. No project-level context needed — review is scoped to the phase."
+      },
+      {
+        "adapter_action": "test_phase",
+        "required_context": ["phase_plan", "build_summary", "review_findings"],
+        "optional_context": [],
+        "assembly_note": "Tests should cover the phase plan scope. Review findings indicate what to test specifically."
+      },
+      {
+        "adapter_action": "fix_findings",
+        "required_context": ["findings_or_failures", "phase_plan", "latest_build_summary"],
+        "optional_context": [],
+        "assembly_note": "Findings (from review) or failures (from tests) plus the plan and current build state so fixes stay in scope."
+      },
+      {
+        "adapter_action": "generate_handoff",
+        "required_context": ["phase_plan", "build_summary", "review_findings", "test_results"],
+        "optional_context": ["unresolved_issues", "next_phase_name"],
+        "assembly_note": "Full phase artifact set. Unresolved issues and next phase context help write a useful handoff."
+      },
+      {
+        "adapter_action": "summarize_state",
+        "required_context": [],
+        "optional_context": [],
+        "assembly_note": "No injected context. The adapter captures whatever the current OpenCode session state is."
+      }
+    ]
+  },
+  "run_record_schema": {
+    "description": "Every adapter-backed action creates a RunRecord persisted to <repo>/.flowbench/runs/<run-id>.json.",
+    "fields": {
+      "run_id": "string (ulid)",
+      "action": "string — the adapter action name",
+      "phase_id": "string | null",
+      "started_at": "ISO8601 timestamp",
+      "finished_at": "ISO8601 timestamp | null",
+      "status": "string — one of: queued, running, succeeded, failed, timed_out, cancelled, interrupted",
+      "input_artifact_refs": "object — map of context_key to artifact_path or hash",
+      "output_artifact_path": "string | null — path to the artifact produced, if any",
+      "failure_message": "string | null — plain English error description",
+      "recovery_message": "string | null — plain English suggested next step",
+      "template_version": "string — hash or version of the command template used",
+      "working_directory": "string — repo path where the command ran",
+      "command_context_hash": "string — sha256 of the assembled context bundle inputs (scope, plan, audit, handoff, etc.). Enables tracing a retry back to the prior attempt while confirming it uses a fresh context."
+    },
+    "status_transitions": [
+      "queued → running (on dispatch)",
+      "running → succeeded | failed | timed_out | cancelled | interrupted (terminal or interrupt)",
+      "terminal states (succeeded, failed, timed_out, cancelled, interrupted) never transition directly back to running",
+      "retry creates a NEW RunRecord — it does not change a terminal record's status"
+    ],
+    "recovery_choices": [
+      {
+        "choice": "inspect_current_state",
+        "label": "Inspect current state",
+        "exact_meaning": "Open the last known artifacts, event history, run details, and working directory. Read-only — never changes any state.",
+        "safety_rule": "Read-only. Never changes state or transitions. Simply returns current artifact content."
+      },
+      {
+        "choice": "retry_last_action",
+        "label": "Retry the last action",
+        "exact_meaning": "Create a NEW RunRecord and run the same action with a newly assembled current context bundle (fresh scope, current plan, latest handoff — not the stale inputs from the interrupted run). The retry is a new execution, not a continuation.",
+        "safety_rule": "Requires approval confirmation again if the action has a risk_category. Must never reuse a stale process, stale output file, or stale approval from the interrupted run. command_context_hash must differ from the interrupted run if the context changed."
+      },
+      {
+        "choice": "continue_from_current_state",
+        "label": "Continue from current state",
+        "exact_meaning": "Mark the interrupted run as acknowledged (status remains interrupted). Do not execute anything. Present only stage-valid next actions — the builder chooses what to do next based on the current artifacts.",
+        "safety_rule": "Cannot force a transition, skip required artifacts, or auto-advance the state. The builder selects the next action from the command pane as normal."
+      },
+      {
+        "choice": "revise_the_plan",
+        "label": "Revise the plan",
+        "exact_meaning": "Return to the applicable planning or sharpening action without modifying completed artifacts. Prior artifacts remain immutable and visible.",
+        "safety_rule": "Re-planning does not destroy prior artifacts. The builder can always reference what was previously generated."
+      }
+    ],
+    "recovery_rule": "On startup, any RunRecord with status=running is set to status=interrupted. The builder is shown a recovery prompt with the four choices above. Never auto-rerun interrupted work. Only one run can be active at a time — enforce with a single-active-run lock."
+  },
+  "golden_path_tests": [
+    {
+      "name": "new_build_golden_path",
+      "description": "Full new build lifecycle from init to completion, including recovery after restart",
+      "steps": [
+        "Initialize project → state is starting",
+        "Set scope text → state is scope_ready",
+        "Generate master plan (mocked adapter) → state is master_plan_sharpening",
+        "Sharpen master plan once → state is master_plan_sharpening (iterative)",
+        "Accept master plan → state is phase_queue_ready, phase-queue.json has phases",
+        "Start first phase → state is phase_in_progress, phase state is phase_starting",
+        "Generate phase plan (mocked adapter) → phase state is phase_sharpening",
+        "Accept phase plan → phase state is phase_ready_to_build",
+        "[SIMULATE RESTART] — verify current-state.json reloads same state",
+        "POST /actions/start_building with confirmed:true (mocked adapter) → phase state is phase_reviewing",
+        "Accept review → phase state is phase_testing",
+        "Accept test results → phase state is phase_handoff",
+        "Generate handoff (mocked adapter) → handoff.json created",
+        "Accept handoff → phase state is phase_complete, project state is phase_queue_ready",
+        "Complete all phases → project state is project_complete"
+      ]
+    },
+    {
+      "name": "existing_app_golden_path",
+      "description": "Existing app mode: audit, plan, one complete phase",
+      "steps": [
+        "Create temp directory with known files (e.g., package.json, src/index.ts, tests/)",
+        "Initialize project in existing_app mode pointing to temp dir",
+        "Verify audit artifact is created with 5 sections",
+        "Set scope for a new feature",
+        "Generate master plan — verify audit context appears in prompt (mocked adapter)",
+        "Sharpen and accept master plan",
+        "Complete one full phase: plan → build → review → test → handoff (mocked adapter)",
+        "Verify handoff artifact references the phase context correctly",
+        "Clean up temp directory"
+      ]
+    },
+    {
+      "name": "interrupted_run_recovery",
+      "description": "Verify interrupted run detection and recovery prompt",
+      "steps": [
+        "Start a build action (mocked adapter that hangs)",
+        "Stop the FlowBench process mid-run",
+        "Restart FlowBench",
+        "Verify RunRecord with status=running is now status=interrupted",
+        "Verify UI shows recovery prompt (not auto-rerun)"
+      ]
+    },
+    {
+      "name": "approval_gate",
+      "description": "Verify stage-level approval blocks risky actions until confirmed",
+      "steps": [
+        "Reach phase_ready_to_build state",
+        "POST /actions/start_building without confirmed flag (risk_category: modify_files)",
+        "Verify response includes confirmation_required with risk_explanation",
+        "Verify state did not change — no adapter call, no RunRecord created",
+        "POST /actions/start_building with confirmed: true",
+        "Verify adapter is called and state transitions to phase_building"
+      ]
+    },
+    {
+      "name": "invalid_transition_rejected",
+      "description": "Verify invalid state transitions return clear errors",
+      "steps": [
+        "In scope_ready, attempt to POST /actions/accept_master_plan",
+        "Verify 400 response with plain English explanation",
+        "Verify state did not change"
+      ]
+    },
+    {
+      "name": "adapter_action_unavailable_in_phase1",
+      "description": "Verify adapter-backed actions return adapter_not_available before Phase 3",
+      "steps": [
+        "In scope_ready, POST /actions/generate_master_plan (adapter-backed)",
+        "Verify response includes adapter_not_available status with plain English explanation",
+        "Verify state did not change (validate this is read-only endpoint behavior)"
+      ]
+    }
+  ]
+}

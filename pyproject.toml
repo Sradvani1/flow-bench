@@ -1,0 +1,30 @@
+[project]
+name = "flowbench"
+version = "0.1.0"
+description = "FlowBench - open-source local workflow console"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0.0",
+    "click>=8.0.0",
+    "ulid-py>=1.1.0",
+]
+
+[project.scripts]
+flowbench = "services.orchestrator.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["services/orchestrator/tests"]
+python_files = ["test_*.py"]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.backends._legacy:_Backend"

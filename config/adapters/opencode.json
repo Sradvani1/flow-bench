@@ -1,0 +1,74 @@
+{
+  "adapter": "opencode",
+  "description": "OpenCode CLI adapter. Command templates use $variable syntax.",
+  "methods": {
+    "load_existing_project": {
+      "timeout_seconds": 120,
+      "template": "audit-existing-app.md"
+    },
+    "audit_existing_app": {
+      "timeout_seconds": 120,
+      "template": "audit-existing-app.md"
+    },
+    "generate_master_plan": {
+      "timeout_seconds": 300,
+      "template": "generate-master-plan.md"
+    },
+    "refine_plan": {
+      "timeout_seconds": 300,
+      "template": "generate-master-plan.md"
+    },
+    "sharpen_phase_plan": {
+      "timeout_seconds": 240,
+      "template": "sharpen-plan.md"
+    },
+    "sharpen_plan": {
+      "timeout_seconds": 240,
+      "template": "sharpen-plan.md"
+    },
+    "generate_phase_plan": {
+      "timeout_seconds": 240,
+      "template": "generate-phase-plan.md"
+    },
+    "start_building": {
+      "timeout_seconds": 600,
+      "template": "build-phase.md"
+    },
+    "build_phase": {
+      "timeout_seconds": 600,
+      "template": "build-phase.md"
+    },
+    "review_phase": {
+      "timeout_seconds": 300,
+      "template": "review-phase.md"
+    },
+    "test_phase": {
+      "timeout_seconds": 300,
+      "template": "test-phase.md"
+    },
+    "fix_failures": {
+      "timeout_seconds": 600,
+      "template": "fix-findings.md"
+    },
+    "retry": {
+      "timeout_seconds": 600,
+      "template": "build-phase.md"
+    },
+    "fix_findings": {
+      "timeout_seconds": 600,
+      "template": "fix-findings.md"
+    },
+    "generate_handoff": {
+      "timeout_seconds": 120,
+      "template": "generate-handoff.md"
+    },
+    "ask_for_summary": {
+      "timeout_seconds": 60,
+      "template": "summarize-state.md"
+    },
+    "summarize_state": {
+      "timeout_seconds": 60,
+      "template": "summarize-state.md"
+    }
+  }
+}
