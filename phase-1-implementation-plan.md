@@ -53,7 +53,7 @@ Internal engineering names are never exposed to the user via API responses, even
 
 | Internal concept | User-facing language |
 |---|---|
-| `adapter_not_available` | "This action requires the coding agent, which is not ready yet." |
+| `adapter_not_available` | "This step needs an execution tool that is not available in this setup yet." |
 | `StateTransitionError` | "This action is not available from the current step." |
 | `RunRecord.status=interrupted` | "Work stopped unexpectedly." |
 | `Invalid transition` | "You can't do that right now. Try one of the available actions instead." |
@@ -740,7 +740,7 @@ All adapter-backed actions are visible with `enabled: true` (the builder can see
 ```json
 {
   "status": "adapter_not_available",
-  "message": "This action requires the coding agent, which is not ready yet. It will be available in a future update.",
+  "message": "This step needs an execution tool that is not available in this setup yet.",
   "action": "generate_master_plan",
   "state_unchanged": true
 }

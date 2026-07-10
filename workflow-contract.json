@@ -2,6 +2,9 @@
   "contract_version": "1.0.0",
   "generated_at": "2026-07-10T00:00:00Z",
   "purpose": "Authoritative source of truth for every state, transition, action, artifact, and event in FlowBench. Validates workflows.json, actions.json, state-machine tests, API responses, and UI rendering.",
+  "ownership_boundary": {
+    "description": "FlowBench is the system of record for workflow state, state transitions, artifacts, events, and run lifecycle. Adapters do not own workflow truth. They return execution results that FlowBench validates, persists, and translates into state changes according to the workflow contract."
+  },
   "notes": [
     "Approval model: stage-level only. Risk categories are declared per-action in actions.json, not detected from adapter output. Approval is a pre-dispatch gate — the builder confirms the category of risk before the adapter runs.",
     "Recovery: every terminal or blocked state has at least one recovery action. No dead ends.",
@@ -204,7 +207,7 @@
       "actions": {
         "sharpen_plan": {
           "label": "Refine the plan",
-          "description": "Ask the agent to review the plan and surface ambiguities or missing context",
+          "description": "Ask the execution tool to review the plan and surface ambiguities or missing context",
           "risk_category": null,
           "risk_explanation": null,
           "preconditions": [],
@@ -486,7 +489,7 @@
       "actions": {
         "sharpen_phase_plan": {
           "label": "Sharpen this plan",
-          "description": "Ask the agent to review the phase plan for ambiguities",
+          "description": "Ask the execution tool to review the phase plan for ambiguities",
           "risk_category": null,
           "risk_explanation": null,
           "preconditions": [],
@@ -519,9 +522,9 @@
       "actions": {
         "start_building": {
           "label": "Start building",
-          "description": "Execute the phase plan — the coding agent will make changes",
+          "description": "Execute the phase plan — the execution tool will make changes",
           "risk_category": "modify_files",
-          "risk_explanation": "Starting this build may create, modify, or delete files in your project directory. The coding agent will follow the approved phase plan but may make independent decisions about implementation details. Review changes after the build completes.",
+          "risk_explanation": "Starting this build may create, modify, or delete files in your project directory. The execution tool will follow the approved phase plan but may make independent decisions about implementation details. Review changes after the build completes.",
           "preconditions": [],
           "target_state": "phase_building",
           "artifact_created": "build-summary.json (on completion)",
@@ -583,7 +586,7 @@
         },
         "ask_for_summary": {
           "label": "Ask for a summary",
-          "description": "Get a progress update from the coding agent",
+          "description": "Get a progress update from the execution tool",
           "risk_category": null,
           "risk_explanation": null,
           "preconditions": [],
@@ -641,9 +644,9 @@
         },
         "fix_findings": {
           "label": "Fix findings",
-          "description": "Have the coding agent address review findings",
+          "description": "Have the execution tool address review findings",
           "risk_category": "modify_files",
-          "risk_explanation": "The coding agent will modify files to address review findings.",
+          "risk_explanation": "The execution tool will modify files to address review findings.",
           "preconditions": [],
           "target_state": "phase_fixing",
           "artifact_created": null,
@@ -691,9 +694,9 @@
         },
         "fix_failures": {
           "label": "Fix failures",
-          "description": "Have the coding agent address test failures",
+          "description": "Have the execution tool address test failures",
           "risk_category": "modify_files",
-          "risk_explanation": "The coding agent will modify files to fix test failures.",
+          "risk_explanation": "The execution tool will modify files to fix test failures.",
           "preconditions": [],
           "target_state": "phase_fixing",
           "artifact_created": null,
@@ -946,9 +949,61 @@
         "adapter_action": "summarize_state",
         "required_context": [],
         "optional_context": [],
-        "assembly_note": "No injected context. The adapter captures whatever the current OpenCode session state is."
+        "assembly_note": "No injected context. The adapter captures whatever the current execution state is."
       }
     ]
+  },
+  "adapter_capabilities": {
+    "description": "Descriptive-only mapping of adapter-backed actions. References the exact snake_case action identifiers from the contract. Capability metadata is descriptive only — it cannot modify dispatch, recovery, context assembly, state transitions, or adapter selection.",
+    "rules": [
+      "Capability metadata must reference the existing contract action names exactly (snake_case). No aliases, camelCase variants, or alternate names.",
+      "Capability metadata must not introduce fallback behavior, rerouting, or synthesized steps.",
+      "Capability metadata must not imply new state machine concepts, artifact types, or workflow actions."
+    ],
+    "actions": {
+      "audit_existing_app": {
+        "summary": "Scan an existing codebase to produce a 5-section audit report.",
+        "read_only": true
+      },
+      "generate_master_plan": {
+        "summary": "Create a full project plan from the scope document.",
+        "read_only": false
+      },
+      "sharpen_plan": {
+        "summary": "Review the master plan for ambiguities and missing context.",
+        "read_only": false
+      },
+      "generate_phase_plan": {
+        "summary": "Create a detailed plan for a single phase.",
+        "read_only": false
+      },
+      "build_phase": {
+        "summary": "Execute a phase plan — the tool produces file changes in the project directory.",
+        "read_only": false
+      },
+      "review_phase": {
+        "summary": "Compare what was built against the phase plan and produce findings.",
+        "read_only": true,
+        "note": "This is its own adapter-backed action, not part of 'planning'."
+      },
+      "test_phase": {
+        "summary": "Run tests on the build output and report results.",
+        "read_only": true
+      },
+      "fix_findings": {
+        "summary": "Address review findings or test failures by modifying files.",
+        "read_only": false
+      },
+      "generate_handoff": {
+        "summary": "Create structured handoff notes for the next phase.",
+        "read_only": false
+      },
+      "summarize_state": {
+        "summary": "Request a progress update from the execution tool.",
+        "read_only": true,
+        "note": "Read-only and non-recovery. Does not resume sessions, retry work, or substitute for interrupted-run handling. Recovery is governed separately by RunRecords and the recovery choices defined in this contract."
+      }
+    }
   },
   "run_record_schema": {
     "description": "Every adapter-backed action creates a RunRecord persisted to <repo>/.flowbench/runs/<run-id>.json.",

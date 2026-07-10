@@ -50,7 +50,7 @@
   },
   "sharpen_plan": {
     "label": "Refine the plan",
-    "description": "Ask the agent to review the plan and surface ambiguities or missing context",
+    "description": "Ask the execution tool to review the plan and surface ambiguities or missing context",
     "risk_category": null,
     "risk_explanation": null,
     "action_type": "adapter"
@@ -141,7 +141,7 @@
   },
   "sharpen_phase_plan": {
     "label": "Sharpen this plan",
-    "description": "Ask the agent to review the phase plan for ambiguities",
+    "description": "Ask the execution tool to review the phase plan for ambiguities",
     "risk_category": null,
     "risk_explanation": null,
     "action_type": "adapter"
@@ -176,7 +176,7 @@
   },
   "ask_for_summary": {
     "label": "Ask for a summary",
-    "description": "Get a progress update from the coding agent",
+    "description": "Get a progress update from the execution tool",
     "risk_category": null,
     "risk_explanation": null,
     "action_type": "adapter"
@@ -190,9 +190,9 @@
   },
   "fix_findings": {
     "label": "Fix findings",
-    "description": "Have the coding agent address review findings",
+    "description": "Have the execution tool address review findings",
     "risk_category": "modify_files",
-    "risk_explanation": "The coding agent will modify files to address review findings.",
+    "risk_explanation": "The execution tool will modify files to address review findings.",
     "action_type": "adapter"
   },
   "override_and_continue": {
@@ -211,9 +211,9 @@
   },
   "fix_failures": {
     "label": "Fix failures",
-    "description": "Have the coding agent address test failures",
+    "description": "Have the execution tool address test failures",
     "risk_category": "modify_files",
-    "risk_explanation": "The coding agent will modify files to fix test failures.",
+    "risk_explanation": "The execution tool will modify files to fix test failures.",
     "action_type": "adapter"
   },
   "skip_tests": {

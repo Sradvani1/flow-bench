@@ -224,6 +224,8 @@ A plan is ready for acceptance only when ALL of these are true:
 
 ### Phase 3 — OpenCode Adapter: Execution Backend Integration
 
+**FlowBench ownership boundary:** FlowBench is the system of record for workflow state, state transitions, artifacts, events, and run lifecycle. Adapters do not own workflow truth. They return execution results that FlowBench validates, persists, and translates into state changes according to the workflow contract. OpenCode is adapter one under that boundary — it does not own workflow state or orchestration.
+
 **Estimated complexity:** High  
 **Dependencies:** Phase 1  
 **Deliverable:** All ExecutionAdapter methods for OpenCode. 10 command templates with `$variable` syntax. RunRecord integration. AdapterResult without risk flags.

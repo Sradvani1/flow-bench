@@ -118,8 +118,8 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         return {
             "status": "adapter_not_available",
             "message": (
-                "This action requires the coding agent, which is not ready yet. "
-                "It will be available in a future update."
+                "This step needs an execution tool "
+                "that is not available in this setup yet."
             ),
             "action": action,
             "state_unchanged": True,
