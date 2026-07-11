@@ -192,6 +192,34 @@ A narrow contract audit was performed against the revised plan. All nine checkpo
 | `retry` action target state (`phase_blocked` → `phase_blocked`) | 3+ | Marked with `_auto_transition` prefix; filtered from `get_valid_actions` |
 | UI / console shell | 2 | Not started |
 
+## Pre-Phase 2 Adapter Boundary Freeze
+
+A contract-first sharpening pass was performed after Phase 1 build completion and before Phase 2 UI work. The goal was to freeze the adapter abstraction boundary so the Phase 2 console shell does not normalize OpenCode-specific assumptions or introduce a second routing system.
+
+**Commit**: `c29f9e5` — "Freeze adapter boundary before Phase 2"
+
+### What Changed
+
+| File | Change |
+|------|--------|
+| `workflow-contract.json` | Added `ownership_boundary` section declaring FlowBench as system of record for state, transitions, artifacts, events, and run lifecycle. Added `adapter_capabilities` section — descriptive-only mapping of 10 adapter-backed actions keyed by exact snake_case identifiers. Fixed 9 "coding agent"/"the agent" references across 6 actions to backend-neutral "execution tool" language. Fixed `summarize_state` context bundle rules to remove "OpenCode" reference. |
+| `config/actions.json` | Fixed 7 "coding agent"/"the agent" references across 5 actions. |
+| `config/policies.json` | Fixed 4 `default_explanation` strings to describe risks in builder terms ("This action will...") instead of agent-console terms. |
+| `services/orchestrator/api/actions.py` | Updated `adapter_not_available` message to: "This step needs an execution tool that is not available in this setup yet." |
+| `master-plan.md` | Added ownership boundary callout at top of Phase 3 section. |
+| `master-plan.json` | Added ownership boundary as architecture decision. Updated Phase 1.6 embedded message to match new adapter_not_available text. |
+| `phase-1-implementation-plan.md` | Updated two references to the old `adapter_not_available` message. |
+
+### Constraints Respected
+
+- No new states, actions, artifacts, recovery paths, or orchestration modes.
+- No changes to the state machine graph, actions list, artifact types, or RunRecord semantics.
+- Capability metadata is descriptive-only — no dispatch, routing, or context assembly implications.
+- `review_phase` remains an explicit adapter-backed action (not grouped under "planning").
+- `summarize_state` documented as read-only and non-recovery.
+- OpenCode remains adapter one under the frozen boundary.
+- All 143 tests pass, ruff clean.
+
 ## Test Coverage
 
 143 tests across 7 files:
