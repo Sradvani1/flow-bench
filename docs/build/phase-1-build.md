@@ -210,7 +210,7 @@ A contract-first sharpening pass was performed after Phase 1 build completion an
 | `services/orchestrator/api/actions.py` | Updated `adapter_not_available` message to: "This step needs an execution tool that is not available in this setup yet." |
 | `../master-plan.md` | Added ownership boundary callout at top of Phase 3 section. |
 | `../master-plan.json` | Added ownership boundary as architecture decision. Updated Phase 1.6 embedded message to match new adapter_not_available text. |
-| `../plan/phase-1-implementation-plan.md` | Updated two references to the old `adapter_not_available` message. |
+| `../plan/phase-1-plan.md` | Updated two references to the old `adapter_not_available` message. |
 
 ### Constraints Respected
 

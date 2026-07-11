@@ -2,7 +2,7 @@
 
 **Status**: Plan — revised per review. Ready for implementation.
 **Based on commit**: `3dc890e` (Phase 2 complete)
-**Plan format**: Follows `phase-2-implementation-plan.md` conventions.
+**Plan format**: Follows `phase-2-plan.md` conventions.
 
 ## Goal
 
