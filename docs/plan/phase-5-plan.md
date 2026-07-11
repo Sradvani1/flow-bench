@@ -456,3 +456,7 @@ ruff check .                                            # no lint errors
 cd apps/web && npm test                                 # 9 dialog tests pass
 cd apps/web && npm run build                            # no type errors
 ```
+
+---
+
+**Plan finalized at commit `f37dd94`**
