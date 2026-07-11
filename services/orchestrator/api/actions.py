@@ -15,13 +15,25 @@ from services.orchestrator.engine.guards import (
 )
 from services.orchestrator.engine.phase_machine import create_phase_machine
 from services.orchestrator.engine.project_machine import create_project_machine
-from services.orchestrator.engine.state_machine import StateTransitionError
+from services.orchestrator.engine.state_machine import ACTION_LABELS, StateTransitionError
 from services.orchestrator.schemas.errors import ErrorResponse
 from services.orchestrator.schemas.state import CurrentState
 from services.orchestrator.store.event_log import EventLog
 from services.orchestrator.store.file_store import FileStore
 
 router = APIRouter(tags=["actions"])
+
+
+def _resolve_label(action_name: str, entry: dict | None) -> str:
+    label = ACTION_LABELS.get(action_name)
+    if label:
+        return label
+    if entry:
+        raw = (entry.get("label") or "").strip()
+        if raw:
+            return raw
+    return action_name.replace("_", " ").title()
+
 
 GUARD_MAP = {
     "scope_has_content": scope_has_content,
@@ -57,34 +69,21 @@ async def get_actions():
     phase_state = state_data.get("current_phase_state")
 
     available = []
-    if phase_state:
-        phase_machine = create_phase_machine(config)
-        for action_info in phase_machine.get_valid_actions(phase_state):
-            action_name = action_info["action"]
-            entry = actions_config.get(action_name, {})
-            available.append({
-                "action": action_name,
-                "label": entry.get("label", action_name),
-                "description": entry.get("description", ""),
-                "risk_category": entry.get("risk_category"),
-                "risk_explanation": entry.get("risk_explanation"),
-                "action_type": entry.get("action_type", action_info["action_type"]),
-                "enabled": True,
-            })
-    else:
-        project_machine = create_project_machine(config)
-        for action_info in project_machine.get_valid_actions(current_state):
-            action_name = action_info["action"]
-            entry = actions_config.get(action_name, {})
-            available.append({
-                "action": action_name,
-                "label": entry.get("label", action_name),
-                "description": entry.get("description", ""),
-                "risk_category": entry.get("risk_category"),
-                "risk_explanation": entry.get("risk_explanation"),
-                "action_type": entry.get("action_type", action_info["action_type"]),
-                "enabled": True,
-            })
+    machine = create_phase_machine(config) if phase_state else create_project_machine(config)
+    current = phase_state or current_state
+    for action_info in machine.get_valid_actions(current):
+        action_name = action_info["action"]
+        entry = actions_config.get(action_name, {})
+        label = _resolve_label(action_name, entry)
+        available.append({
+            "action": action_name,
+            "label": label,
+            "description": entry.get("description", ""),
+            "risk_category": entry.get("risk_category"),
+            "risk_explanation": entry.get("risk_explanation"),
+            "action_type": entry.get("action_type", action_info["action_type"]),
+            "enabled": True,
+        })
 
     return available
 
@@ -127,13 +126,28 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
 
     # Navigation actions: return 200 with same state, no side effects
     if action_type == "navigation":
+        label = _resolve_label(action, action_entry)
         return {
             "status": "ok",
-            "message": action_entry.get("label", action) + " requested.",
+            "message": label + " requested.",
         }
 
     # System actions
     state_data = store.read_json("current-state.json")
+
+    # B4: Bootstrap initial state for start_new_project when no state file exists
+    if action == "start_new_project" and state_data is None:
+        state_data = CurrentState(
+            project_display_name="My Project",
+            repo_path=str(Path.cwd()),
+            mode="new_build",
+            project_state="starting",
+            total_phases=0,
+            phases_complete=0,
+            adapter="opencode",
+            updated_at=datetime.now(timezone.utc),
+        ).model_dump()
+
     if state_data is None:
         return JSONResponse(
             status_code=400,
@@ -233,7 +247,7 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
             "from_state": evt["from_state"],
             "to_state": evt["to_state"],
             "actor": "builder",
-            "description": action_entry.get("label", action),
+            "description": _resolve_label(action, action_entry),
             "phase_id": current_state_obj.current_phase_id,
             "artifact_type": None,
         }
@@ -245,8 +259,9 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         json.loads(current_state_obj.model_dump_json())
     )
 
+    label = _resolve_label(action, action_entry)
     return {
         "status": "ok",
         "new_state": new_state,
-        "message": action_entry.get("label", action) + " completed.",
+        "message": label + " completed.",
     }

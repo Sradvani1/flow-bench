@@ -188,12 +188,13 @@ class TestRuns:
 
 
 class TestErrorCases:
-    def test_error_on_missing_state(self):
+    def test_start_new_project_bootstraps_state(self):
         Path(".flowbench/current-state.json").unlink(missing_ok=True)
         resp = client.post("/api/v1/actions/start_new_project")
-        assert resp.status_code == 400
+        assert resp.status_code == 200
         data = resp.json()
-        assert data["error_code"] == "NO_PROJECT"
+        assert data["status"] == "ok"
+        assert data["new_state"] == "scope_ready"
 
     def test_error_on_corrupt_artifact(self):
         client.post("/api/v1/actions/start_new_project")

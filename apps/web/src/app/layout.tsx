@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Providers } from "@/components/providers";
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "FlowBench",
@@ -7,8 +9,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <Providers>
+          <div className="min-h-screen bg-background">
+            {children}
+          </div>
+        </Providers>
+      </body>
     </html>
   );
 }
