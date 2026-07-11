@@ -1,6 +1,6 @@
 # Phase 1 — Foundation: Revised Implementation Plan
 
-> Builds from: master-plan.json (phase_001), workflow-contract.json, master-plan.md v3.0
+> Builds from: ../master-plan.json (phase_001), ../workflow-contract.json, ../master-plan.md v3.0
 > Revised per: phase1_feedback_to_opencode.md
 >
 > **Phase 1 scope:** Light orchestration service with local state mutation and no adapter execution.

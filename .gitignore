@@ -24,3 +24,4 @@ Thumbs.db
 
 # FlowBench runtime (local variant — committed copies are fine)
 .flowbench/
+.coverage

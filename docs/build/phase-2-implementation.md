@@ -2,7 +2,7 @@
 
 **Phase 2 commit**: `3dc890e`
 
-**Plan**: `phase-2-implementation-plan.md`
+**Plan**: `../plan/phase-2-implementation-plan.md`
 
 **Status**: Implemented. Three-pane console UI with shell, navigation, risk confirmation dialog, placeholder artifact area, phase queue, and dark mode toggle. Backend additions for phase queue, artifact serving, state labels, action labels, and initial project bootstrap.
 
