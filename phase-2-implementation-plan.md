@@ -1,6 +1,7 @@
 # Phase 2 — Console UI: Shell, Navigation, and Base Layout
 
 **Status**: Plan — final. Ready for build.
+**Commit**: `ea2e8af`
 
 ## Goal
 
