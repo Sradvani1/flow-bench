@@ -324,9 +324,9 @@ A plan is ready for acceptance only when ALL of these are true:
 #### Success Criteria
 
 - Policy engine provides `get_risk_explanation()` consumed by both API and UI
-- Audit events logged for every approval and rejection decision
+- Audit events logged for `action_approved` (confirmed risky) and `confirmation_required` (unconfirmed risky). Dialog dismissals produce no event — purely local UI.
 - UI dialog renders `risk_explanation` verbatim from backend policy engine
-- Dialog has Enter=approve, Escape=reject keyboard shortcuts
+- Dialog has Enter=approve, Escape dismisses locally with neutral feedback
 - Dialog is accessible (ARIA labels, focus trap)
 - `adapter_not_available` shown clearly if backend returns it
 - Approval acceptance tests pass (full flow: API enforcement + dialog)
@@ -335,7 +335,7 @@ A plan is ready for acceptance only when ALL of these are true:
 
 ##### 5.1 — Policy engine — risk category definitions and explanation generation
 
-**Files:** `services/orchestrator/policies/engine.py`, `config/policies.json`
+**Files:** `services/orchestrator/policies.py`, `config/policies.json`
 
 **Success:** Loads from config. `get_risk_explanation()` shared by API and UI. No adapter output inspection.
 
@@ -343,7 +343,7 @@ A plan is ready for acceptance only when ALL of these are true:
 
 **Files:** `api/actions.py`, `services/action_service.py`
 
-**Success:** Events logged for confirmation_required returns, approved dispatches, and dismissed dialogs. Events appear in project timeline.
+**Success:** Events logged for `confirmation_required` returns and `action_approved` dispatches. Dismissed dialogs produce no event — purely local UI action. Timeline (Phase 4) renders events from the event log only; dismissal events never appear.
 
 ##### 5.3 — UI dialog polish — keyboard, accessibility, verbatim rendering
 
@@ -353,7 +353,7 @@ A plan is ready for acceptance only when ALL of these are true:
 
 ##### 5.4 — Approval acceptance tests
 
-**Files:** `tests/test_approval_gate.py`, `src/__tests__/risk-confirmation-dialog.test.tsx`
+**Files:** tests added to existing `services/orchestrator/tests/test_api.py`, `src/__tests__/risk-confirmation-dialog.test.tsx`
 
 **Success:** API-level (unconfirmed → confirmation_required, confirmed → dispatch, non-risky → direct). UI-level (dialog appears for risky, not for non-risky, approve/reject paths). Backend safety authority verified (confirmed flag ignored for non-risky actions). Invalid stage rejection verified.
 
