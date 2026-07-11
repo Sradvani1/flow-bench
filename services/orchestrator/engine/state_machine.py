@@ -158,10 +158,12 @@ class StateMachine:
         else:
             candidates.insert(0, f"{event}_failed")
 
+        matched_key = None
         target_state = None
         for key in candidates:
             if key in events_config:
                 target_state = events_config[key]["target_state"]
+                matched_key = key
                 break
 
         if target_state is None:
@@ -169,4 +171,8 @@ class StateMachine:
                 f"The current state doesn't handle the '{event}' event."
             )
 
-        return target_state, []
+        return target_state, [{
+            "event": matched_key,
+            "from_state": current_state,
+            "to_state": target_state,
+        }]

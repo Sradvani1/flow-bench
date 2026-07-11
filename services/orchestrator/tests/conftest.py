@@ -3,6 +3,46 @@ from pathlib import Path
 
 import pytest
 
+from services.orchestrator.adapters.base import ExecutionAdapter
+from services.orchestrator.schemas.adapter import AdapterResult
+
+
+class MockAdapter(ExecutionAdapter):
+    def __init__(self):
+        self.calls = []
+        self.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text='{"status": "ok"}',
+        )
+        self.timeout_result = AdapterResult(
+            success=False, outcome="timed_out",
+            output_text="timed out",
+        )
+
+    async def execute(  # noqa: PLR0913
+        self, action, context_bundle, run_id, working_dir, timeout, output_path
+    ):
+        self.calls.append({
+            "action": action,
+            "context_keys": list(context_bundle.keys()),
+            "run_id": run_id,
+            "output_path": output_path,
+            "timeout": timeout,
+        })
+        if output_path:
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_text(self.result.output_text)
+        return self.result
+
+
+@pytest.fixture(autouse=True)
+def mock_adapter():
+    from services.orchestrator.services import action_service
+    adapter = MockAdapter()
+    action_service.set_default_adapter(adapter)
+    yield adapter
+    action_service.set_default_adapter(None)
+
 
 @pytest.fixture
 def temp_repo():

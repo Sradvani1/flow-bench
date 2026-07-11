@@ -136,6 +136,12 @@
       },
       "project_blocked": {
         "actions": {
+          "retry": {
+            "target_state": "project_blocked",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "project_retried"
+          },
           "replan_from_here": {
             "target_state": "master_plan_sharpening",
             "action_type": "system",

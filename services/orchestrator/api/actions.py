@@ -91,6 +91,7 @@ async def get_actions():
 class ActionRequest(BaseModel):
     scope_content: Optional[str] = None
     repo_path: Optional[str] = None
+    confirmed: bool = False
 
 
 @router.post("/actions/{action}")
@@ -113,16 +114,29 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
 
     action_type = action_entry.get("action_type")
 
+    # Confirmation gate for all actions (system and adapter)
+    risk_category = action_entry.get("risk_category")
+    if risk_category:
+        policies_path = Path(__file__).parents[3] / "config" / "policies.json"
+        with open(policies_path) as f:
+            policies = json.load(f)
+        cat = policies.get("risk_categories", {}).get(risk_category, {})
+        if cat.get("requires_confirmation") and not (body and body.confirmed):
+            return {
+                "status": "needs_approval",
+                "message": f"This action requires confirmation ({risk_category}).",
+                "risk_category": risk_category,
+                "action": action,
+                "state_unchanged": True,
+            }
+
     if action_type == "adapter":
-        return {
-            "status": "adapter_not_available",
-            "message": (
-                "This step needs an execution tool "
-                "that is not available in this setup yet."
-            ),
-            "action": action,
-            "state_unchanged": True,
-        }
+        from services.orchestrator.services.action_service import ActionService
+        service = ActionService(".")
+        body_dict = body.model_dump() if body else None
+        return await service.dispatch_adapter_action(
+            action, body_dict, config, actions_config
+        )
 
     # Navigation actions: return 200 with same state, no side effects
     if action_type == "navigation":
