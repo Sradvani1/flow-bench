@@ -27,46 +27,49 @@ export function RiskConfirmationDialog({
   onComplete,
 }: RiskConfirmationDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   if (!action) return null;
 
+  const handleDismiss = () => {
+    onOpenChange(false);
+    toast("Action cancelled.");
+  };
+
   const handleProceed = async () => {
     setLoading(true);
-    setError(null);
     const result = await postAction(action.action, { confirmed: true });
+    setLoading(false);
     if (result.status === "error") {
-      setError(result.message);
       toast(result.message, "destructive");
-      setLoading(false);
-      onComplete();
     } else {
-      setLoading(false);
-      onOpenChange(false);
       if (result.message) toast(result.message);
-      onComplete();
     }
+    onOpenChange(false);
+    onComplete();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        aria-describedby="risk-description"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !loading) {
+            e.preventDefault();
+            handleProceed();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{action.label}</DialogTitle>
-          <DialogDescription>
+          <DialogDescription id="risk-description">
             {action.risk_explanation ?? "Are you sure you want to proceed?"}
           </DialogDescription>
         </DialogHeader>
-        {error && (
-          <div className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded">
-            {error}
-          </div>
-        )}
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => onOpenChange(false)}
+            onClick={handleDismiss}
             disabled={loading}
           >
             Cancel

@@ -43,16 +43,16 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
       return;
     }
 
+    if (entry.risk_category) {
+      setRiskAction(entry);
+      setRiskOpen(true);
+      return;
+    }
+
     if (entry.action_type === "adapter") {
       const res = await postAction(entry.action);
       toast(res.message);
       reloadAll();
-      return;
-    }
-
-    if (entry.risk_category) {
-      setRiskAction(entry);
-      setRiskOpen(true);
       return;
     }
 
@@ -120,13 +120,13 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
     (a) => a.action_type === "system" && !a.risk_category
   );
   const riskyActions = (actions ?? []).filter(
-    (a) => a.action_type === "system" && a.risk_category
+    (a) => a.risk_category
   );
   const navigationActions = (actions ?? []).filter(
     (a) => a.action_type === "navigation"
   );
   const adapterActions = (actions ?? []).filter(
-    (a) => a.action_type === "adapter"
+    (a) => a.action_type === "adapter" && !a.risk_category
   );
 
   return (

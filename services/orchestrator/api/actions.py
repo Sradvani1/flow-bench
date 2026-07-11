@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -16,6 +17,8 @@ from services.orchestrator.engine.guards import (
 from services.orchestrator.engine.phase_machine import create_phase_machine
 from services.orchestrator.engine.project_machine import create_project_machine
 from services.orchestrator.engine.state_machine import ACTION_LABELS, StateTransitionError
+from services.orchestrator.policies import get_risk_explanation, requires_confirmation
+from services.orchestrator.schemas.approvals import ApprovalRecord
 from services.orchestrator.schemas.errors import ErrorResponse
 from services.orchestrator.schemas.state import CurrentState
 from services.orchestrator.store.event_log import EventLog
@@ -80,7 +83,11 @@ async def get_actions():
             "label": label,
             "description": entry.get("description", ""),
             "risk_category": entry.get("risk_category"),
-            "risk_explanation": entry.get("risk_explanation"),
+            "risk_explanation": (
+                get_risk_explanation(entry["risk_category"], entry)
+                if entry.get("risk_category")
+                else None
+            ),
             "action_type": entry.get("action_type", action_info["action_type"]),
             "enabled": True,
         })
@@ -114,21 +121,89 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
 
     action_type = action_entry.get("action_type")
 
+    # Load state early for event metadata
+    state_data = store.read_json("current-state.json")
+    if action == "start_new_project" and state_data is None:
+        state_data = CurrentState(
+            project_display_name="My Project",
+            repo_path=str(Path.cwd()),
+            mode="new_build",
+            project_state="starting",
+            total_phases=0,
+            phases_complete=0,
+            adapter="opencode",
+            updated_at=datetime.now(timezone.utc),
+        ).model_dump()
+    current_state_obj = CurrentState(**state_data) if state_data else None
+    current_project_state = current_state_obj.project_state if current_state_obj else None
+    current_phase_state = current_state_obj.current_phase_state if current_state_obj else None
+
     # Confirmation gate for all actions (system and adapter)
     risk_category = action_entry.get("risk_category")
-    if risk_category:
-        policies_path = Path(__file__).parents[3] / "config" / "policies.json"
-        with open(policies_path) as f:
-            policies = json.load(f)
-        cat = policies.get("risk_categories", {}).get(risk_category, {})
-        if cat.get("requires_confirmation") and not (body and body.confirmed):
-            return {
-                "status": "needs_approval",
-                "message": f"This action requires confirmation ({risk_category}).",
-                "risk_category": risk_category,
-                "action": action,
-                "state_unchanged": True,
-            }
+    resolved_explanation = (
+        get_risk_explanation(risk_category, action_entry)
+        if risk_category
+        else None
+    )
+
+    if risk_category and requires_confirmation(risk_category) and not (body and body.confirmed):
+        event_log.append({
+            "schema_version": 1,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": "warning",
+            "event": "confirmation_required",
+            "from_state": current_project_state or current_phase_state,
+            "to_state": None,
+            "actor": "builder",
+            "description": (
+                f"Confirmation required: {_resolve_label(action, action_entry)}"
+                f" ({risk_category})"
+            ),
+            "phase_id": current_state_obj.current_phase_id if current_state_obj else None,
+            "artifact_type": None,
+        })
+        return {
+            "status": "needs_approval",
+            "message": f"This action requires confirmation ({risk_category}).",
+            "risk_category": risk_category,
+            "risk_explanation": resolved_explanation,
+            "action": action,
+            "state_unchanged": True,
+        }
+
+    confirmed_risky = (
+        risk_category
+        and requires_confirmation(risk_category)
+        and body is not None
+        and body.confirmed
+    )
+
+    if confirmed_risky:
+        label = _resolve_label(action, action_entry)
+        approvals_data = store.read_json("approvals.json") or {"approvals": []}
+        approvals_data["approvals"].append(ApprovalRecord(
+            approval_id=str(uuid.uuid4())[:8],
+            action=action,
+            action_description=label,
+            risk_category=risk_category,
+            risk_explanation=resolved_explanation,
+            status="confirmed",
+            confirmed_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
+        ).model_dump())
+        store.write_json("approvals.json", approvals_data)
+        event_log.append({
+            "schema_version": 1,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "level": "info",
+            "event": "action_approved",
+            "from_state": current_project_state or current_phase_state,
+            "to_state": None,
+            "actor": "builder",
+            "description": f"Approved: {label} ({risk_category})",
+            "phase_id": current_state_obj.current_phase_id if current_state_obj else None,
+            "artifact_type": None,
+        })
 
     if action_type == "adapter":
         from services.orchestrator.services.action_service import ActionService
@@ -147,21 +222,6 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         }
 
     # System actions
-    state_data = store.read_json("current-state.json")
-
-    # B4: Bootstrap initial state for start_new_project when no state file exists
-    if action == "start_new_project" and state_data is None:
-        state_data = CurrentState(
-            project_display_name="My Project",
-            repo_path=str(Path.cwd()),
-            mode="new_build",
-            project_state="starting",
-            total_phases=0,
-            phases_complete=0,
-            adapter="opencode",
-            updated_at=datetime.now(timezone.utc),
-        ).model_dump()
-
     if state_data is None:
         return JSONResponse(
             status_code=400,
@@ -176,10 +236,6 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
                 error_code="NO_PROJECT",
             ).model_dump(),
         )
-
-    current_state_obj = CurrentState(**state_data)
-    current_project_state = current_state_obj.project_state
-    current_phase_state = current_state_obj.current_phase_state
 
     # Build context for guards
     context = {}

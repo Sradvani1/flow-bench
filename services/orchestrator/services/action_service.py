@@ -20,6 +20,7 @@ from services.orchestrator.engine.state_machine import (
     ACTION_LABELS,
     StateTransitionError,
 )
+from services.orchestrator.policies import requires_confirmation
 from services.orchestrator.schemas.adapter import AdapterResult
 from services.orchestrator.schemas.errors import ErrorResponse
 from services.orchestrator.schemas.state import CurrentState
@@ -84,7 +85,7 @@ class ActionService:
         # 2. Confirmation check (already done in actions.py for system actions,
         #    but adapter actions reach here without confirmation check)
         risk_cat = action_entry.get("risk_category")
-        if risk_cat and self._requires_confirmation(risk_cat):
+        if risk_cat and requires_confirmation(risk_cat):
             confirmed = body.get("confirmed", False) if body else False
             if not confirmed:
                 return {
@@ -150,7 +151,7 @@ class ActionService:
             # 5b. Re-check confirmation for original action's risk category
             original_entry = actions_config.get(retry_action, {})
             orig_risk = original_entry.get("risk_category")
-            if orig_risk and self._requires_confirmation(orig_risk):
+            if orig_risk and requires_confirmation(orig_risk):
                 confirmed = body.get("confirmed", False) if body else False
                 if not confirmed:
                     return {
@@ -401,15 +402,6 @@ class ActionService:
             ),
             "run_id": run.run_id,
         }
-
-    def _requires_confirmation(self, risk_category: str) -> bool:
-        policies_path = (
-            Path(__file__).resolve().parents[3] / "config" / "policies.json"
-        )
-        with open(policies_path) as f:
-            policies = json.load(f)
-        cat = policies.get("risk_categories", {}).get(risk_category, {})
-        return cat.get("requires_confirmation", False)
 
     def _find_completion_event_key(
         self, state_config: dict, success: bool

@@ -197,6 +197,61 @@ class TestSystemConfirmation:
         data = resp.json()
         assert data["status"] == "ok"
 
+    def test_risky_adapter_requires_confirmation(self, mock_adapter):
+        _setup_phase_ready_to_build()
+        resp = client.post("/api/v1/actions/start_building")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "needs_approval"
+        assert data["risk_category"] == "modify_files"
+        assert data["state_unchanged"] is True
+        state_resp = client.get("/api/v1/state")
+        assert state_resp.json()["current_phase_state"] == "phase_ready_to_build"
+
+    def test_confirmation_required_event_logged(self):
+        _setup_scope_ready()
+        client.post("/api/v1/actions/cancel_project")
+        events = client.get("/api/v1/events").json()["events"]
+        assert any(e["event"] == "confirmation_required" for e in events)
+
+    def test_action_approved_event_logged(self):
+        _setup_scope_ready()
+        client.post("/api/v1/actions/cancel_project", json={"confirmed": True})
+        events = client.get("/api/v1/events").json()["events"]
+        assert any(e["event"] == "action_approved" for e in events)
+
+    def test_approvals_artifact_written(self):
+        _setup_scope_ready()
+        client.post("/api/v1/actions/cancel_project", json={"confirmed": True})
+        store = FileStore(".")
+        approvals = store.read_json("approvals.json")
+        assert approvals is not None
+        assert len(approvals["approvals"]) == 1
+        record = approvals["approvals"][0]
+        assert record["action"] == "cancel_project"
+        assert record["risk_category"] == "destructive"
+        assert record["status"] == "confirmed"
+
+    def test_non_risky_confirmed_creates_no_approval_audit(self):
+        _setup_scope_ready()
+        store = FileStore(".")
+        assert store.read_json("approvals.json") is None
+        client.post("/api/v1/actions/edit_scope", json={"confirmed": True})
+        assert store.read_json("approvals.json") is None
+        events = client.get("/api/v1/events").json()["events"]
+        assert not any(e["event"] in ("action_approved", "confirmation_required") for e in events)
+
+    def test_invalid_stage_creates_no_approval_audit(self):
+        _setup_scope_ready()
+        events_before = len(client.get("/api/v1/events").json()["events"])
+        store = FileStore(".")
+        assert store.read_json("approvals.json") is None
+        resp = client.post("/api/v1/actions/generate_phase_plan", json={"confirmed": True})
+        assert resp.status_code == 400
+        assert store.read_json("approvals.json") is None
+        events_after = len(client.get("/api/v1/events").json()["events"])
+        assert events_after == events_before
+
 
 class TestAdapterDispatch:
     def test_dispatch_transitions_state(self, mock_adapter):
@@ -597,6 +652,39 @@ def _setup_phase_blocked():
         "current_phase_id": "phase_001",
         "current_phase_state": "phase_blocked",
         "total_phases": 2,
+        "phases_complete": 0,
+        "adapter": "opencode",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+
+def _setup_phase_ready_to_build():
+    """Create a minimal phase state at phase_ready_to_build for phase-level tests."""
+    store = FileStore(".")
+    store.write_json("master-plan.json", {
+        "schema_version": 1,
+        "phases": [{"id": "phase_001", "name": "Setup"}],
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    store.write_json("scope.json", {
+        "schema_version": 1,
+        "content": "Build an app",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    store.write_json("phase-plan-phase_001.json", {
+        "schema_version": 1,
+        "plan": "Implement feature",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    })
+    store.write_json("current-state.json", {
+        "schema_version": 1,
+        "project_display_name": "Test",
+        "repo_path": str(Path.cwd()),
+        "mode": "new_build",
+        "project_state": "phase_in_progress",
+        "current_phase_id": "phase_001",
+        "current_phase_state": "phase_ready_to_build",
+        "total_phases": 1,
         "phases_complete": 0,
         "adapter": "opencode",
         "updated_at": datetime.now(timezone.utc).isoformat(),
