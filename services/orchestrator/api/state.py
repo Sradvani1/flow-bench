@@ -41,6 +41,8 @@ async def get_state():
         data["current_phase_state_label"] = PRODUCT_LABELS.get(
             phase_state, _safe_label(phase_state)
         )
+    data["mode"] = data.get("mode", "new_build")
+    data["mode_label"] = "Existing App" if data.get("mode") == "existing_app" else "New Build"
     return data
 
 

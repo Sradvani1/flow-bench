@@ -145,6 +145,45 @@ class TestContractValidation:
     def test_no_duplicate_action_keys(self):
         assert len(ACTIONS) == len(set(ACTIONS.keys()))
 
+    def test_scope_ready_events_match_contract(self):
+        contract_path = Path(__file__).parents[3] / "docs" / "workflow-contract.json"
+        with open(contract_path) as f:
+            contract = json.load(f)
+
+        wf_events = WORKFLOWS["project_machine"]["states"]["scope_ready"].get("events", {})
+        ct_events = contract["states"]["scope_ready"].get("events", {})
+
+        assert set(wf_events.keys()) == set(ct_events.keys()), (
+            f"workflows.json scope_ready events {set(wf_events.keys())} != "
+            f"contract scope_ready events {set(ct_events.keys())}"
+        )
+        for name in wf_events:
+            assert wf_events[name]["target_state"] == ct_events[name]["target_state"], (
+                f"Event '{name}' target mismatch: "
+                f"workflows={wf_events[name]['target_state']} "
+                f"contract={ct_events[name]['target_state']}"
+            )
+
+    def test_project_blocked_retry_in_workflows(self):
+        project_blocked = WORKFLOWS["project_machine"]["states"]["project_blocked"]
+        actions = project_blocked.get("actions", {})
+        assert "retry" in actions, "project_blocked must have a retry action"
+        assert actions["retry"]["action_type"] == "adapter", (
+            "project_blocked.retry must be an adapter action"
+        )
+        assert actions["retry"]["target_state"] == "project_blocked"
+
+    def test_project_blocked_retry_in_contract(self):
+        contract_path = Path(__file__).parents[3] / "docs" / "workflow-contract.json"
+        with open(contract_path) as f:
+            contract = json.load(f)
+
+        project_blocked = contract["states"]["project_blocked"]
+        actions = project_blocked.get("actions", {})
+        assert "retry" in actions, "contract project_blocked must have a retry action"
+        assert actions["retry"]["action_type"] == "adapter"
+        assert actions["retry"]["target_state"] == "project_blocked"
+
     def test_phase_id_format(self):
         for machine_key in ("project_machine", "phase_machine"):
             machine = WORKFLOWS.get(machine_key, {})

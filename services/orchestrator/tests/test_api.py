@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -636,6 +637,220 @@ class TestCrashRecovery:
         assert state_resp.json()["project_state"] == "project_blocked"
         runs_resp = client.get("/api/v1/runs")
         assert len(runs_resp.json()["runs"]) == 0
+
+
+class TestExistingApp:
+    def test_bootstrap_creates_state(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": str(Path.cwd().resolve()),
+                "framework": "python", "directory_structure": [],
+                "entry_points": [], "dependencies": [],
+                "test_frameworks": [], "generated_at": "2026-01-01T00:00:00Z",
+            }),
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+        assert resp.json()["new_state"] == "scope_ready"
+
+        store = FileStore(".")
+        persisted = store.read_json("current-state.json")
+        assert persisted["mode"] == "existing_app"
+        assert persisted["repo_path"] == str(Path.cwd().resolve())
+
+    def test_bootstrap_creates_audit_artifact(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": str(Path.cwd().resolve()),
+                "framework": "python",
+                "directory_structure": ["src/", "tests/"],
+                "entry_points": ["src/main.py"],
+                "dependencies": [{"name": "fastapi", "version": "0.100", "type": "runtime"}],
+                "test_frameworks": ["pytest"],
+                "git_info": {"branch": "main", "last_commit": "abc123", "has_uncommitted": False},
+                "generated_at": "2026-01-01T00:00:00Z",
+            }),
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        store = FileStore(".")
+        audit = store.read_json("audit.json")
+        assert audit is not None
+        assert audit["framework"] == "python"
+        assert audit["repo_path"] == str(Path.cwd().resolve())
+
+    def test_bootstrap_creates_runrecord(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        path = str(Path.cwd().resolve())
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": path,
+                "framework": None, "directory_structure": [],
+                "entry_points": [], "dependencies": [],
+                "test_frameworks": [], "generated_at": "2026-01-01T00:00:00Z",
+            }),
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        audit_runs = [r for r in runs if r["action"] == "load_existing_project"]
+        assert len(audit_runs) == 1
+        assert audit_runs[0]["status"] == "succeeded"
+
+    def test_bootstrap_logs_started_event(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        path = str(Path.cwd().resolve())
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": path,
+                "framework": None, "directory_structure": [],
+                "entry_points": [], "dependencies": [],
+                "test_frameworks": [], "generated_at": "2026-01-01T00:00:00Z",
+            }),
+        )
+        client.post("/api/v1/actions/load_existing_project")
+        events_resp = client.get("/api/v1/events")
+        events = events_resp.json()["events"]
+        event_names = [e["event"] for e in events]
+        assert "project_loaded_existing" in event_names
+        assert "audit_complete" in event_names
+
+    def test_adapter_failure_yields_blocked(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=False, outcome="failed", output_text="Scan failed",
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "failed"
+        assert resp.json()["new_state"] == "project_blocked"
+        store = FileStore(".")
+        assert store.read_json("audit.json") is None
+
+    def test_adapter_failure_logs_audit_failed(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=False, outcome="failed", output_text="Scan failed",
+        )
+        client.post("/api/v1/actions/load_existing_project")
+        events_resp = client.get("/api/v1/events")
+        events = events_resp.json()["events"]
+        assert any(e["event"] == "audit_failed" for e in events)
+
+    def test_adapter_failure_runrecord_failed(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=False, outcome="failed", output_text="Scan failed",
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        run_id = resp.json().get("run_id")
+        assert run_id is not None
+        run_resp = client.get(f"/api/v1/runs/{run_id}")
+        assert run_resp.json()["status"] == "failed"
+
+    def test_malformed_output_rejected(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded", output_text="not json at all",
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "failed"
+        assert resp.json()["new_state"] == "project_blocked"
+        store = FileStore(".")
+        assert store.read_json("audit.json") is None
+        run_id = resp.json().get("run_id")
+        assert run_id is not None
+        run_resp = client.get(f"/api/v1/runs/{run_id}")
+        assert run_resp.json()["status"] == "failed"
+
+    def test_missing_required_fields_rejected(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        path = str(Path.cwd().resolve())
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": path,
+                "framework": "react",
+                "directory_structure": [], "entry_points": [],
+                "dependencies": [], "test_frameworks": [],
+            }),
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "failed"
+        store = FileStore(".")
+        assert store.read_json("audit.json") is None
+
+    def test_mismatched_audit_path_rejected(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": "/some/wrong/path",
+                "framework": "python",
+                "directory_structure": [], "entry_points": [],
+                "dependencies": [], "test_frameworks": [],
+                "generated_at": "2026-01-01T00:00:00Z",
+            }),
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "failed"
+        store = FileStore(".")
+        assert store.read_json("audit.json") is None
+
+    def test_retry_after_failure_creates_new_runrecord(self, mock_adapter):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=False, outcome="failed", output_text="First failure",
+        )
+        resp1 = client.post("/api/v1/actions/load_existing_project")
+        run_id_1 = resp1.json().get("run_id")
+        assert resp1.json()["new_state"] == "project_blocked"
+
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({
+                "repo_path": str(Path.cwd().resolve()),
+                "framework": "python", "directory_structure": [],
+                "entry_points": [], "dependencies": [],
+                "test_frameworks": [], "generated_at": "2026-01-01T00:00:00Z",
+            }),
+        )
+        resp2 = client.post("/api/v1/actions/retry", json={"confirmed": True})
+        assert resp2.status_code == 200
+        run_id_2 = resp2.json().get("run_id")
+        assert run_id_2 != run_id_1
+        assert resp2.json()["new_state"] == "scope_ready"
+        run1_resp = client.get(f"/api/v1/runs/{run_id_1}")
+        assert run1_resp.json()["status"] == "failed"
+        run2_resp = client.get(f"/api/v1/runs/{run_id_2}")
+        assert run2_resp.json()["status"] == "succeeded"
+        store = FileStore(".")
+        assert store.read_json("audit.json") is not None
+
+    def test_new_build_unchanged(self):
+        resp = client.get("/api/v1/state")
+        assert resp.json().get("mode") == "new_build"
+        store = FileStore(".")
+        assert store.read_json("audit.json") is None
+
+    def test_mode_in_state_response(self):
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        client.post("/api/v1/actions/load_existing_project",
+                     json={"confirmed": True})
+        resp = client.get("/api/v1/state")
+        assert resp.json().get("mode") == "existing_app"
+        assert resp.json().get("mode_label") == "Existing App"
 
 
 # ── Helpers that use the TestClient ──────────────────────────────

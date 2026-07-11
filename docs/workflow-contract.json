@@ -100,10 +100,11 @@
           "risk_explanation": null,
           "preconditions": [],
           "target_state": "scope_ready",
-          "artifact_created": "audit.json (if existing app mode)",
+          "artifact_created": "audit.json",
           "event_emitted": "project_loaded_existing",
+          "completion_events": ["audit_complete", "audit_failed"],
           "adapter_action": "audit_existing_app",
-          "recovery": "audit failed → retry with different path or switch to new build",
+          "recovery": "audit failed → retry (same path), revise scope (back to scope_ready), or cancel",
           "action_type": "adapter"
         },
         "change_backend": {
@@ -164,6 +165,16 @@
           "adapter_action": null,
           "recovery": null,
           "action_type": "system"
+        }
+      },
+      "events": {
+        "audit_complete": {
+          "target_state": "scope_ready",
+          "description": "Existing-app audit completed successfully. State remains scope_ready."
+        },
+        "audit_failed": {
+          "target_state": "project_blocked",
+          "description": "Existing-app audit failed. Transition to project_blocked for recovery."
         }
       }
     },
@@ -329,6 +340,19 @@
       "level": "project",
       "on_entry_artifact": null,
       "actions": {
+        "retry": {
+          "label": "Retry",
+          "description": "Try the last project-level action again (e.g. re-run failed audit). Creates a fresh RunRecord.",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "project_blocked",
+          "artifact_created": "depends on retried action",
+          "event_emitted": "project_retried",
+          "adapter_action": "depends_on_prior_state",
+          "recovery": null,
+          "action_type": "adapter"
+        },
         "replan_from_here": {
           "label": "Re-plan from here",
           "description": "Go back to the master plan and revise it",

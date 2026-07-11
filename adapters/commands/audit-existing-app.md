@@ -7,4 +7,14 @@ Scan the repository and produce a structured audit report covering:
 4. Test infrastructure and coverage patterns
 5. Git history and branching strategy
 
-Write your complete structured output to $output_path as a JSON file.
+Write your complete structured output to $output_path as a JSON file
+conforming to this schema:
+
+- repo_path (string, required): the canonical path of the audited repo
+- framework (string or null): detected framework
+- directory_structure (array of strings): key file paths relative to repo root
+- entry_points (array of strings): module entry points
+- dependencies (array of objects): each with name, version, type fields
+- test_frameworks (array of strings): detected test tools
+- git_info (object or null): with branch, last_commit, has_uncommitted fields
+- generated_at (ISO 8601 string, required): when the audit was produced

@@ -73,6 +73,12 @@ class ContextService:
             value = self._resolve_context_key(key, state)
             if value is not None:
                 bundle[key] = value
+        if state.mode == "existing_app" and "existing_app_audit" in bundle:
+            audit = bundle["existing_app_audit"]
+            if "scope" in bundle:
+                bundle["scope"] = (
+                    f"Current Project State:\n{audit}\n\nScope:\n{bundle['scope']}"
+                )
         return bundle
 
     def resolve_for_retry(

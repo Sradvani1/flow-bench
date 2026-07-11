@@ -251,9 +251,7 @@ class ActionService:
 
         # 8. Record RunRecord metadata
         template_name = self._get_template_name(resolved_action)
-        template_path = (
-            Path(self.repo_path) / "adapters" / "commands" / template_name
-        )
+        template_path = self._resolve_template_path(template_name)
         template_version = (
             self._hash_file(template_path) if template_path.exists() else None
         )
@@ -328,6 +326,20 @@ class ActionService:
                         raise ValueError(
                             "Adapter output is not a JSON object"
                         )
+                    if artifact_filename == "audit.json":
+                        from services.orchestrator.schemas.artifacts import AuditArtifact
+                        try:
+                            AuditArtifact.model_validate(output_data)
+                        except Exception:
+                            raise ValueError(
+                                "Audit artifact failed schema validation"
+                            )
+                        if output_data.get("repo_path") != current_state.repo_path:
+                            raise ValueError(
+                                f"Audit repo_path '{output_data.get('repo_path')}' "
+                                f"does not match active repository "
+                                f"'{current_state.repo_path}'"
+                            )
                     self.store.write_json(artifact_filename, output_data)
                 except (json.JSONDecodeError, ValueError, OSError) as e:
                     result = AdapterResult(
@@ -420,6 +432,12 @@ class ActionService:
     def _get_template_name(self, action: str) -> str:
         config = self.context_service._load_adapter_config()
         return config.get("methods", {}).get(action, {}).get("template", "")
+
+    def _resolve_template_path(self, template_name: str) -> Path:
+        return (
+            Path(__file__).resolve().parents[3]
+            / "adapters" / "commands" / template_name
+        )
 
     def _get_adapter_config(self, action: str) -> dict:
         config = self.context_service._load_adapter_config()

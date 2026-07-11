@@ -25,6 +25,14 @@
         "events": {}
       },
       "scope_ready": {
+        "events": {
+          "audit_complete": {
+            "target_state": "scope_ready"
+          },
+          "audit_failed": {
+            "target_state": "project_blocked"
+          }
+        },
         "actions": {
           "edit_scope": {
             "target_state": "scope_ready",
@@ -44,8 +52,7 @@
             "guard": null,
             "event": "project_cancelled"
           }
-        },
-        "events": {}
+        }
       },
       "master_plan_drafting": {
         "actions": {

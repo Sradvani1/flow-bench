@@ -127,6 +127,70 @@ class TestContextService:
         assert "scope" in bundle
         assert "existing_app_audit" not in bundle
 
+    def test_existing_app_audit_prepended_to_scope(self, temp_repo):
+        store = FileStore(temp_repo)
+        store.write_json("scope.json", {
+            "schema_version": 1, "content": "Build a task manager",
+            "updated_at": "2026-01-01T00:00:00Z",
+        })
+        store.write_json("audit.json", {
+            "schema_version": 1, "repo_path": temp_repo, "framework": "react",
+            "directory_structure": ["src/"], "entry_points": ["src/index.ts"],
+            "dependencies": [], "test_frameworks": [],
+            "generated_at": "2026-01-01T00:00:00Z",
+        })
+        state = CurrentState(
+            project_display_name="Test", repo_path=temp_repo,
+            mode="existing_app", project_state="scope_ready",
+            total_phases=0, phases_complete=0, adapter="opencode",
+            updated_at="2026-01-01T00:00:00Z",
+        )
+        svc = ContextService(temp_repo, store)
+        bundle = svc.assemble("generate_master_plan", state)
+        assert "existing_app_audit" in bundle
+        assert bundle["scope"].startswith("Current Project State:")
+
+    def test_new_build_no_audit_injection(self, temp_repo):
+        store = FileStore(temp_repo)
+        store.write_json("scope.json", {
+            "schema_version": 1, "content": "Build a task manager",
+            "updated_at": "2026-01-01T00:00:00Z",
+        })
+        store.write_json("audit.json", {
+            "schema_version": 1, "repo_path": temp_repo, "framework": "react",
+            "directory_structure": [], "entry_points": [],
+            "dependencies": [], "test_frameworks": [],
+            "generated_at": "2026-01-01T00:00:00Z",
+        })
+        state = CurrentState(
+            project_display_name="Test", repo_path=temp_repo,
+            mode="new_build", project_state="scope_ready",
+            total_phases=0, phases_complete=0, adapter="opencode",
+            updated_at="2026-01-01T00:00:00Z",
+        )
+        svc = ContextService(temp_repo, store)
+        bundle = svc.assemble("generate_master_plan", state)
+        assert "Current Project State" not in bundle.get("scope", "")
+
+    def test_existing_app_audit_key_resolved(self, temp_repo):
+        store = FileStore(temp_repo)
+        store.write_json("audit.json", {
+            "schema_version": 1, "repo_path": temp_repo, "framework": "react",
+            "directory_structure": ["src/"], "entry_points": [],
+            "dependencies": [], "test_frameworks": [],
+            "generated_at": "2026-01-01T00:00:00Z",
+        })
+        svc = ContextService(temp_repo, store)
+        state = CurrentState(
+            project_display_name="Test", repo_path=temp_repo,
+            mode="existing_app", project_state="starting",
+            total_phases=0, phases_complete=0, adapter="opencode",
+            updated_at="2026-01-01T00:00:00Z",
+        )
+        value = svc._resolve_context_key("existing_app_audit", state)
+        assert value is not None
+        assert "react" in value
+
 
 class TestOpenCodeAdapter:
     def test_template_safe_substitute(self, tmp_path):
@@ -285,3 +349,28 @@ class TestTemplateDiscovery:
                 if not tmpl_path.exists():
                     missing.append(f"{action_name} → {template}")
         assert not missing, f"Missing templates referenced by: {missing}"
+
+    def test_template_resolution_from_source_tree(self):
+        """Verify _resolve_template_path formula works independent of any repo_path."""
+        from services.orchestrator.services.action_service import ActionService
+        template_path = Path(__file__).resolve().parents[3] / "adapters" / "commands"
+        assert template_path.exists(), (
+            f"Source template directory not found: {template_path}"
+        )
+        # Verify every referenced template resolves via the ActionService method
+        import json
+        with open(self.ADAPTER_CONFIG) as f:
+            config = json.load(f)
+        svc = ActionService(self.REPO_ROOT)
+        for method in config.get("methods", {}).values():
+            template_name = method.get("template")
+            if template_name:
+                resolved = svc._resolve_template_path(template_name)
+                assert resolved.exists(), (
+                    f"Template '{template_name}' resolved to "
+                    f"nonexistent path: {resolved}"
+                )
+                # Verify it's in the source tree, not repo_path
+                assert str(resolved).startswith(str(self.REPO_ROOT)), (
+                    f"Template '{template_name}' resolved outside source tree: {resolved}"
+                )

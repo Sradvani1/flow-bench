@@ -12,6 +12,8 @@ export interface StateResponse {
   total_phases?: number;
   phases_complete?: number;
   updated_at?: string;
+  mode?: string;
+  mode_label?: string;
 }
 
 export interface ActionEntry {

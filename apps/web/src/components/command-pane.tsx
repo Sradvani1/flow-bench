@@ -25,6 +25,8 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
   const [creating, setCreating] = useState(false);
   const [riskAction, setRiskAction] = useState<ActionEntry | null>(null);
   const [riskOpen, setRiskOpen] = useState(false);
+  const [mode, setMode] = useState<"new_build" | "existing_app">("new_build");
+  const [loadingExisting, setLoadingExisting] = useState(false);
 
   const isNoProject =
     stateData?.status === "no_project" || stateData?.status === "error";
@@ -80,6 +82,23 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
     reloadAll();
   };
 
+  const handleLoadExistingApp = async () => {
+    setLoadingExisting(true);
+    try {
+      const res = await postAction("load_existing_project");
+      if (res.status === "error") {
+        toast(res.message, "destructive");
+      } else {
+        toast(res.message ?? "Project loaded");
+      }
+      reloadAll();
+    } catch {
+      toast("An unexpected error occurred.", "destructive");
+    } finally {
+      setLoadingExisting(false);
+    }
+  };
+
   if (stateLoading) {
     return (
       <div className={`flex flex-col gap-2 p-4 ${className}`}>
@@ -96,22 +115,56 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Actions
         </h3>
-        <div className="border rounded-lg p-4">
-          <h4 className="font-medium text-sm mb-2">Start new project</h4>
-          <textarea
-            className="w-full h-24 rounded border border-input bg-background p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-            placeholder="Describe your app idea..."
-            value={scopeText}
-            onChange={(e) => setScopeText(e.target.value)}
-          />
-          <Button
-            className="w-full mt-2"
-            onClick={handleCreateProject}
-            disabled={creating || !scopeText.trim()}
-          >
-            {creating ? "Creating..." : "Create"}
-          </Button>
+        <div role="radiogroup" aria-label="Project mode"
+             className="flex gap-0 border rounded-lg overflow-hidden">
+          <button role="radio" aria-checked={mode === "new_build"}
+            className={`flex-1 px-3 py-1.5 text-xs font-medium ${
+              mode === "new_build"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            }`}
+            onClick={() => setMode("new_build")}>
+            New Build
+          </button>
+          <button role="radio" aria-checked={mode === "existing_app"}
+            className={`flex-1 px-3 py-1.5 text-xs font-medium ${
+              mode === "existing_app"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground"
+            }`}
+            onClick={() => setMode("existing_app")}>
+            Existing App
+          </button>
         </div>
+
+        {mode === "new_build" ? (
+          <div className="border rounded-lg p-4">
+            <h4 className="font-medium text-sm mb-2">Start new project</h4>
+            <label htmlFor="scope-input" className="sr-only">App idea</label>
+            <textarea id="scope-input"
+              className="w-full h-24 rounded border border-input bg-background p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+              placeholder="Describe your app idea..."
+              value={scopeText}
+              onChange={(e) => setScopeText(e.target.value)}
+            />
+            <Button className="w-full mt-2" onClick={handleCreateProject}
+              disabled={creating || !scopeText.trim()}>
+              {creating ? "Creating..." : "Create"}
+            </Button>
+          </div>
+        ) : (
+          <div className="border rounded-lg p-4">
+            <h4 className="font-medium text-sm mb-2">Load existing app</h4>
+            <p className="text-xs text-muted-foreground mb-3">
+              FlowBench will scan the current working directory and
+              produce an audit report for planning.
+            </p>
+            <Button className="w-full" onClick={handleLoadExistingApp}
+              disabled={loadingExisting}>
+              {loadingExisting ? "Auditing..." : "Start Audit"}
+            </Button>
+          </div>
+        )}
       </div>
     );
   }

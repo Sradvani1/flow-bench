@@ -134,6 +134,24 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
             adapter="opencode",
             updated_at=datetime.now(timezone.utc),
         ).model_dump()
+
+    if action == "load_existing_project" and state_data is None:
+        repo_path = str(Path.cwd().resolve())
+        boot_state = CurrentState(
+            project_display_name="My Project",
+            repo_path=repo_path,
+            mode="existing_app",
+            project_state="starting",
+            total_phases=0,
+            phases_complete=0,
+            adapter="opencode",
+            updated_at=datetime.now(timezone.utc),
+        )
+        store.write_json(
+            "current-state.json",
+            json.loads(boot_state.model_dump_json()),
+        )
+        state_data = boot_state.model_dump()
     current_state_obj = CurrentState(**state_data) if state_data else None
     current_project_state = current_state_obj.project_state if current_state_obj else None
     current_phase_state = current_state_obj.current_phase_state if current_state_obj else None

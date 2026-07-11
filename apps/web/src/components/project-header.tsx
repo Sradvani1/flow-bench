@@ -35,6 +35,11 @@ export function ProjectHeader() {
                 {data.current_phase_state_label}
               </span>
             )}
+            {data?.mode === "existing_app" && (
+              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded">
+                Existing App
+              </span>
+            )}
             {data?.current_phase_id && (
               <span className="text-xs text-muted-foreground">
                 Phase {data.current_phase_id}
