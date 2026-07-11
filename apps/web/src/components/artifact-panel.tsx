@@ -1,87 +1,53 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useProjectState } from "@/hooks/use-project-state";
+import { useCurrentArtifact } from "@/hooks/use-current-artifact";
+import {
+  ScopeCard,
+  MasterPlanCard,
+  SharpeningNotesCard,
+  PhasePlanCard,
+  BuildSummaryCard,
+  ReviewFindingsCard,
+  TestResultsCard,
+  HandoffCard,
+  DecisionCard,
+  AuditCard,
+  PhaseQueueCard,
+  EmptyStateCard,
+} from "@/components/artifacts";
+import type React from "react";
 
-const STATE_ARTIFACT_MAP: Record<string, string> = {
-  scope_ready: "scope.json",
-  master_plan_drafting: "master-plan.json",
-  master_plan_sharpening: "master-plan.json",
-  phase_queue_ready: "phase-queue.json",
-  phase_plan: "phase-plan-{phase_id}.json",
-  phase_sharpening: "phase-plan-{phase_id}.json",
-  phase_ready_to_build: "build-summary-{phase_id}.json",
-  phase_building: "build-summary-{phase_id}.json",
-  phase_reviewing: "review-findings-{phase_id}.json",
-  phase_testing: "test-results-{phase_id}.json",
-  phase_fixing: "test-results-{phase_id}.json",
-  phase_handoff: "handoff-{phase_id}.json",
-  phase_complete: "handoff-{phase_id}.json",
+const RENDERER_MAP: Record<
+  string,
+  React.ComponentType<{ data: Record<string, unknown> }>
+> = {
+  ScopeCard,
+  MasterPlanCard,
+  SharpeningNotesCard,
+  PhasePlanCard,
+  BuildSummaryCard,
+  ReviewFindingsCard,
+  TestResultsCard,
+  HandoffCard,
+  DecisionCard,
+  AuditCard,
+  PhaseQueueCard,
 };
-
-function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#x27;",
-  };
-  return text.replace(/[&<>"']/g, (ch) => map[ch] ?? ch);
-}
 
 interface ArtifactPanelProps {
   className?: string;
 }
 
 export function ArtifactPanel({ className = "" }: ArtifactPanelProps) {
-  const { data: stateData, isLoading: stateLoading } = useProjectState();
+  const { data: state, isLoading: stateLoading } = useProjectState();
+  const { data: artifact, isLoading: artifactLoading } =
+    useCurrentArtifact(state);
 
   const isNoProject =
-    stateData?.status === "no_project" || stateData?.status === "error";
-
-  const deriveArtifactFilename = (): string | null => {
-    if (!stateData) return null;
-
-    const phaseState = stateData.current_phase_state;
-    const projectState = stateData.project_state;
-
-    // Phase-state precedence: when in a phase, show phase-level artifact
-    const key = phaseState || projectState;
-    if (!key) return null;
-
-    const pattern = STATE_ARTIFACT_MAP[key];
-    if (!pattern) return null;
-
-    if (pattern.includes("{phase_id}")) {
-      const phaseId = phaseState
-        ? stateData.current_phase_id
-        : null;
-      if (!phaseId) return null;
-      return pattern.replace("{phase_id}", phaseId);
-    }
-
-    return pattern;
-  };
-
-  const filename = deriveArtifactFilename();
-
-  const { data: artifactData, isLoading: artifactLoading } = useQuery({
-    queryKey: ["artifact", filename],
-    queryFn: async () => {
-      if (!filename) return null;
-      const res = await fetch(
-        `http://127.0.0.1:8000/api/v1/artifacts/${filename}`
-      );
-      if (!res.ok) return null;
-      return res.json();
-    },
-    enabled: !!filename,
-    refetchInterval: 5000,
-  });
+    state?.status === "no_project" || state?.status === "error";
 
   if (stateLoading) {
     return (
@@ -102,6 +68,9 @@ export function ArtifactPanel({ className = "" }: ArtifactPanelProps) {
     );
   }
 
+  const mapping = artifact?.mapping ?? null;
+  const Renderer = mapping ? RENDERER_MAP[mapping.rendererName] : null;
+
   return (
     <div className={`flex flex-col ${className}`}>
       <div className="px-4 py-2 border-b">
@@ -116,14 +85,23 @@ export function ArtifactPanel({ className = "" }: ArtifactPanelProps) {
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-4 w-2/3" />
           </div>
-        ) : artifactData ? (
-          <Card>
-            <pre className="text-xs font-mono p-4 overflow-x-auto whitespace-pre-wrap break-all">
-              {escapeHtml(JSON.stringify(artifactData, null, 2))}
-            </pre>
-          </Card>
+        ) : mapping && (mapping.filename === null || artifact?.data === null) ? (
+          <EmptyStateCard
+            title={
+              state?.current_phase_state_label ??
+              state?.project_state_label ??
+              mapping.artifactKey
+            }
+            message={mapping.emptyMessage}
+            suggestedAction={mapping.suggestedAction}
+          />
+        ) : Renderer ? (
+          <Renderer data={artifact?.data ?? {}} />
         ) : (
-          <p className="text-sm text-muted-foreground">No artifact yet.</p>
+          <EmptyStateCard
+            title="Artifact"
+            message="No artifact available."
+          />
         )}
       </ScrollArea>
     </div>

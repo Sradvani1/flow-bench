@@ -13,6 +13,10 @@ def _safe_label(name: str) -> str:
     return name.replace("_", " ").title()
 
 
+# Fixed project-level artifacts; phase-level variants handled by regex below.
+# sharpening-notes is supported at both levels:
+#   project-level: sharpening-notes.json
+#   phase-level:   sharpening-notes-{phase_id}.json
 ALLOWED_ARTIFACTS = {
     "scope.json", "master-plan.json", "sharpening-notes.json",
     "phase-queue.json", "audit.json",
@@ -60,7 +64,7 @@ async def get_artifact(filename: str):
     if filename in ALLOWED_ARTIFACTS:
         pass
     elif re.match(
-        r"^(phase-plan|build-summary|review-findings|test-results|handoff|decision)-phase_\d{3}\.json$",
+        r"^(phase-plan|build-summary|review-findings|test-results|handoff|decision|sharpening-notes)-phase_\d{3}\.json$",
         filename,
     ):
         pass

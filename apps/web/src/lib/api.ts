@@ -45,6 +45,49 @@ function safeLabel(label: string | null | undefined, fallback: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+export interface EventEntry {
+  timestamp: string;
+  level: string;
+  event: string;
+  from_state?: string;
+  to_state?: string;
+  actor: string;
+  description: string;
+  phase_id?: string;
+  artifact_type?: string;
+}
+
+export interface EventsResponse {
+  events: EventEntry[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export async function fetchEvents(
+  offset = 0,
+  limit = 50,
+  level?: string,
+): Promise<EventsResponse> {
+  const params = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+  if (level) params.set("level", level);
+  const res = await fetch(`${BASE}/events?${params}`);
+  if (!res.ok) return { events: [], total: 0, offset, limit };
+  return res.json();
+}
+
+export async function fetchArtifact(
+  filename: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${BASE}/artifacts/${filename}`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchState(): Promise<StateResponse> {
   const res = await fetch(`${BASE}/state`);
   if (!res.ok) {

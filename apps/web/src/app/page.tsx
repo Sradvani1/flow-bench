@@ -4,6 +4,7 @@ import { ProjectHeader } from "@/components/project-header";
 import { PhaseQueue } from "@/components/phase-queue";
 import { ArtifactPanel } from "@/components/artifact-panel";
 import { CommandPane } from "@/components/command-pane";
+import { ProjectTimeline } from "@/components/project-timeline";
 
 export default function Home() {
   return (
@@ -14,6 +15,7 @@ export default function Home() {
         <ArtifactPanel className="flex-1 min-w-0" />
         <CommandPane className="w-[280px] min-w-[280px] border-l shrink-0" />
       </div>
+      <ProjectTimeline />
     </main>
   );
 }
