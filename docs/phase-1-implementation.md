@@ -1,5 +1,7 @@
 # Phase 1 — Implementation & Handoff
 
+**Phase 1 commit**: `34387d9` — Phase 1: pure orchestration service with state machine, file store, event log, and run persistence
+
 **Status**: Accepted. Ready for Phase 2 planning.
 
 ## Purpose
