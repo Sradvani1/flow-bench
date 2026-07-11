@@ -1,6 +1,6 @@
 # Phase 3 — Implementation & Handoff
 
-**Phase 3 commit**: `current` (uncommitted — base commit `01a6048`)
+**Phase 3 commit**: `66a0454`
 
 **Plan**: `../plan/phase-3-plan.md`
 
