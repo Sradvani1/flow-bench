@@ -104,14 +104,14 @@ const STAGE_ARTIFACT_MAP: Record<string, ArtifactMapping> = {
   phase_blocked: {
     artifactKey: "blocked",
     filename: null,
-    rendererName: "EmptyStateCard",
+    rendererName: "BlockedStateCard",
     emptyMessage: "This phase is blocked.",
     suggestedAction: "Run retry or fix_failures to continue.",
   },
   project_blocked: {
     artifactKey: "blocked",
     filename: null,
-    rendererName: "EmptyStateCard",
+    rendererName: "BlockedStateCard",
     emptyMessage: "Project is blocked.",
     suggestedAction: "Run retry to continue.",
   },

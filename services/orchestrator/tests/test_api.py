@@ -610,9 +610,10 @@ class TestCrashRecovery:
         # Verify state unchanged
         state_resp = client.get("/api/v1/state")
         assert state_resp.json()["project_state"] == "master_plan_drafting"
-        # Verify RunRecord is interrupted
+        # Verify RunRecord is interrupted (and appears as active)
         run_resp = client.get("/api/v1/runs/active")
-        assert run_resp.json()["active"] is None
+        assert run_resp.json()["active"] is not None
+        assert run_resp.json()["active"]["status"] == "interrupted"
         updated_run = rs.get_run(run.run_id)
         assert updated_run.status == "interrupted"
 

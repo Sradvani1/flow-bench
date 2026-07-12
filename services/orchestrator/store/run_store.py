@@ -9,6 +9,7 @@ from typing import Optional
 import ulid
 
 from services.orchestrator.schemas.run_record import RunRecord
+from services.orchestrator.store.file_store import strip_sensitive
 
 
 class RunStore:
@@ -102,7 +103,7 @@ class RunStore:
             try:
                 with open(str(path), "r") as f:
                     data = json.load(f)
-                if data.get("status") in ("queued", "running"):
+                if data.get("status") in ("queued", "running", "interrupted"):
                     return RunRecord(**data)
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -146,6 +147,7 @@ class RunStore:
     def _persist(self, run: RunRecord):
         path = self._run_path(run.run_id)
         data = json.loads(run.model_dump_json(exclude_none=True))
+        data = strip_sensitive(data)
         self._atomic_write_json(str(path), data)
 
     def _atomic_write_json(self, path: str, data: dict):

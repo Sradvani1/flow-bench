@@ -17,6 +17,7 @@ import {
   AuditCard,
   PhaseQueueCard,
   EmptyStateCard,
+  BlockedStateCard,
 } from "@/components/artifacts";
 import type React from "react";
 
@@ -35,6 +36,7 @@ const RENDERER_MAP: Record<
   DecisionCard,
   AuditCard,
   PhaseQueueCard,
+  BlockedStateCard,
 };
 
 interface ArtifactPanelProps {
@@ -78,14 +80,14 @@ export function ArtifactPanel({ className = "" }: ArtifactPanelProps) {
           Artifact
         </h3>
       </div>
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 p-4" data-artifact-panel>
         {artifactLoading ? (
           <div className="flex flex-col gap-2">
             <Skeleton className="h-4 w-3/4" />
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-4 w-2/3" />
           </div>
-        ) : mapping && (mapping.filename === null || artifact?.data === null) ? (
+        ) : mapping && mapping.rendererName === "EmptyStateCard" && (mapping.filename === null || artifact?.data === null) ? (
           <EmptyStateCard
             title={
               state?.current_phase_state_label ??
@@ -95,9 +97,11 @@ export function ArtifactPanel({ className = "" }: ArtifactPanelProps) {
             message={mapping.emptyMessage}
             suggestedAction={mapping.suggestedAction}
           />
-        ) : Renderer ? (
+        ) : Renderer && Renderer !== BlockedStateCard ? (
           <Renderer data={artifact?.data ?? {}} />
-        ) : (
+        ) : mapping?.rendererName === "BlockedStateCard" ? (
+          <BlockedStateCard />
+        ) : mapping?.rendererName === "BlockedStateCard" ? null : (
           <EmptyStateCard
             title="Artifact"
             message="No artifact available."

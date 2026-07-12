@@ -4,6 +4,7 @@ export interface StateResponse {
   status?: string;
   message?: string;
   project_display_name?: string;
+  repo_path?: string;
   project_state?: string;
   project_state_label?: string;
   current_phase_state?: string;
@@ -106,6 +107,40 @@ export async function fetchActions(): Promise<ActionEntry[]> {
     ...entry,
     label: safeLabel(entry.label, entry.action),
   }));
+}
+
+export interface RunRecord {
+  run_id: string;
+  action: string;
+  phase_id?: string;
+  started_at: string;
+  finished_at?: string;
+  status: string;
+  failure_message?: string;
+  recovery_message?: string;
+  template_version?: string;
+  working_directory?: string;
+  command_context_hash?: string;
+}
+
+export async function fetchActiveRun(): Promise<{ active: RunRecord | null }> {
+  try {
+    const res = await fetch(`${BASE}/runs/active`);
+    if (!res.ok) return { active: null };
+    return res.json();
+  } catch {
+    return { active: null };
+  }
+}
+
+export async function fetchHealth(): Promise<{ status: string; version: string } | null> {
+  try {
+    const res = await fetch("http://127.0.0.1:8000/health");
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function postAction(

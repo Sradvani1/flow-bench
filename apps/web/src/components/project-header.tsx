@@ -1,12 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import { useTheme } from "next-themes";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectState } from "@/hooks/use-project-state";
+import { SettingsScreen } from "@/components/settings-screen";
 
 export function ProjectHeader() {
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const { data, isLoading } = useProjectState();
   const { setTheme, theme } = useTheme();
 
@@ -57,6 +60,14 @@ export function ProjectHeader() {
         <Button
           variant="ghost"
           size="icon"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Open settings"
+        >
+          <Settings className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label="Toggle dark mode"
         >
@@ -64,6 +75,7 @@ export function ProjectHeader() {
           <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         </Button>
       </div>
+      <SettingsScreen open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   );
 }

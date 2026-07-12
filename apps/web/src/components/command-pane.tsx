@@ -42,6 +42,14 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
         const queue = document.querySelector("[data-phase-queue]");
         queue?.scrollIntoView({ behavior: "smooth" });
       }
+      if (entry.action === "view_summary") {
+        const timeline = document.querySelector("[data-timeline]");
+        timeline?.scrollIntoView({ behavior: "smooth" });
+      }
+      if (entry.action === "view_handoff_notes") {
+        const panel = document.querySelector("[data-artifact-panel]");
+        panel?.scrollIntoView({ behavior: "smooth" });
+      }
       return;
     }
 

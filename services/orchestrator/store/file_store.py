@@ -4,6 +4,26 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+SENSITIVE_KEYS = {"password", "secret", "token", "api_key", "credential"}
+
+
+def strip_sensitive(data: dict) -> dict:
+    """Recursively remove non-empty sensitive fields from data before persistence."""
+    result = {}
+    for k, v in data.items():
+        if k.lower() in SENSITIVE_KEYS and v:
+            continue
+        if isinstance(v, dict):
+            result[k] = strip_sensitive(v)
+        elif isinstance(v, list):
+            result[k] = [
+                strip_sensitive(item) if isinstance(item, dict) else item
+                for item in v
+            ]
+        else:
+            result[k] = v
+    return result
+
 
 class FileStore:
     def __init__(self, repo_path: str):
@@ -22,6 +42,7 @@ class FileStore:
 
     def write_json(self, rel_path: str, data: dict) -> str:
         path = self._validate_path(rel_path)
+        data = strip_sensitive(data)
         content = json.dumps(data, indent=2, default=str)
         fd, tmp_path = tempfile.mkstemp(
             dir=str(path.parent), prefix=".tmp_", suffix=".json"

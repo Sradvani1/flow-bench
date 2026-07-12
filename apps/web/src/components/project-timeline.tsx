@@ -31,7 +31,7 @@ export function ProjectTimeline() {
   } = useEvents();
 
   return (
-    <div className="border-t">
+    <div className="border-t" data-timeline>
       <div className="flex items-center justify-between px-4 py-2 border-b">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
           Timeline

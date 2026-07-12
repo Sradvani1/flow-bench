@@ -6,7 +6,7 @@ Local workflow console that orchestrates software builds through a structured st
 
 ```
 apps/web/             — Next.js 14 frontend (shadcn/ui, Tailwind, React Query)
-services/orchestrator/ — Python FastAPI backend (entrypoint)
+services/orchestrator/ — Python FastAPI backend (entry point)
 config/               — workflow state machine, actions, policies, project modes
 docs/                 — product scope, master plan, workflow contract (authoritative spec)
 ```

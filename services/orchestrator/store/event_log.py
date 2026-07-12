@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 from typing import Optional
 
+from services.orchestrator.store.file_store import strip_sensitive
+
 
 class EventLog:
     def __init__(self, repo_path: str):
@@ -9,6 +11,7 @@ class EventLog:
         self.path.parent.mkdir(parents=True, exist_ok=True)
 
     def append(self, event: dict) -> str:
+        event = strip_sensitive(event)
         line = json.dumps(event, separators=(",", ":"), default=str) + "\n"
         with open(str(self.path), "a") as f:
             f.write(line)

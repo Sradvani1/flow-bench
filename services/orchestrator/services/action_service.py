@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi.responses import JSONResponse
 
 from services.orchestrator.adapters.base import ExecutionAdapter
-from services.orchestrator.adapters.opencode import OpenCodeAdapter
 from services.orchestrator.engine.guards import (
     all_phases_complete,
     has_upcoming_phases,
@@ -37,10 +36,10 @@ def set_default_adapter(adapter: Optional[ExecutionAdapter]) -> None:
     _default_adapter = adapter
 
 
-def get_default_adapter() -> ExecutionAdapter:
+def get_default_adapter() -> ExecutionAdapter | None:
     global _default_adapter
     if _default_adapter is None:
-        _default_adapter = OpenCodeAdapter()
+        return None
     return _default_adapter
 
 
@@ -231,11 +230,24 @@ class ActionService:
                 status_code=400,
                 content=ErrorResponse(
                     message=str(e),
+                    suggested_action="Check that all required artifacts exist and try again.",
                     error_code="CONTEXT_ERROR",
                 ).model_dump(),
             )
 
-        # 7. Create RunRecord (acquires active-run lock)
+        # 7. Check adapter availability
+        if self.adapter is None:
+            return {
+                "status": "adapter_not_available",
+                "message": (
+                    "No execution backend is configured. Adapter-backed actions "
+                    "require a configured backend (e.g., OpenCode)."
+                ),
+                "action": action,
+                "state_unchanged": True,
+            }
+
+        # 8. Create RunRecord (acquires active-run lock)
         try:
             run = self.run_store.create_run(
                 resolved_action, phase_id=current_state.current_phase_id
@@ -249,7 +261,7 @@ class ActionService:
                 },
             )
 
-        # 8. Record RunRecord metadata
+        # 9. Record RunRecord metadata
         template_name = self._get_template_name(resolved_action)
         template_path = self._resolve_template_path(template_name)
         template_version = (
@@ -266,12 +278,12 @@ class ActionService:
         run.command_context_hash = context_hash
         self.run_store._persist(run)
 
-        # 9. Start run
+        # 10. Start run
         self.run_store.start_run(run.run_id)
 
         # ── COMMIT: state mutation begins ──────────────────────────
 
-        # 10. Write intermediate state + log started events
+        # 11. Write intermediate state + log started events
         current_state = self._apply_state(
             current_state, intermediate_state, level
         )
@@ -286,7 +298,7 @@ class ActionService:
                 self._make_event(evt, resolved_action, current_state, level)
             )
 
-        # 11. Execute adapter
+        # 12. Execute adapter
         adapter_config_entry = self._get_adapter_config(resolved_action)
         timeout = adapter_config_entry.get("timeout_seconds", 120)
 
@@ -314,7 +326,7 @@ class ActionService:
                 success=False, outcome="failed", output_text=str(e)
             )
 
-        # 12. Interpret result → write stage artifact
+        # 13. Interpret result → write stage artifact
         if result.success:
             artifact_filename = self._map_adapter_action_to_artifact(
                 resolved_action, current_state
@@ -351,7 +363,7 @@ class ActionService:
                         ),
                     )
 
-        # 13. Determine two-phase vs single-phase
+        # 14. Determine two-phase vs single-phase
         intermediate_config = machine.transitions.get(
             intermediate_state, {}
         )
@@ -378,7 +390,7 @@ class ActionService:
             final_state = intermediate_state
             completion_events = []
 
-        # 14. Write final state + log completion events
+        # 15. Write final state + log completion events
         current_state = self._apply_state(
             current_state, final_state, level
         )
@@ -393,7 +405,7 @@ class ActionService:
                 self._make_event(evt, resolved_action, current_state, level)
             )
 
-        # 15. Complete RunRecord
+        # 16. Complete RunRecord
         self.run_store.complete_run(
             run_id=run.run_id,
             status=result.outcome,
@@ -403,7 +415,7 @@ class ActionService:
             ),
         )
 
-        # 16. Return
+        # 17. Return
         label = self._resolve_label(resolved_action, action_entry)
         return {
             "status": "ok" if result.success else "failed",

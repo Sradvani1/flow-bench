@@ -10,3 +10,4 @@ export { DecisionCard } from "./decision-card";
 export { AuditCard } from "./audit-card";
 export { PhaseQueueCard } from "./phase-queue-card";
 export { EmptyStateCard } from "./empty-state-card";
+export { BlockedStateCard } from "./blocked-state-card";

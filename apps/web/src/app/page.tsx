@@ -5,10 +5,12 @@ import { PhaseQueue } from "@/components/phase-queue";
 import { ArtifactPanel } from "@/components/artifact-panel";
 import { CommandPane } from "@/components/command-pane";
 import { ProjectTimeline } from "@/components/project-timeline";
+import { RecoveryBanner } from "@/components/recovery-banner";
 
 export default function Home() {
   return (
     <main className="flex flex-col h-screen min-w-[1280px]">
+      <RecoveryBanner />
       <ProjectHeader />
       <div className="flex flex-1 overflow-hidden">
         <PhaseQueue className="w-[220px] min-w-[220px] border-r shrink-0" />

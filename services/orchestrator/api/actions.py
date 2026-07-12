@@ -314,6 +314,17 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         )
         store.write_json("scope.json", json.loads(scope.model_dump_json()))
 
+    if action == "start_next_phase":
+        phase_queue_data = store.read_json("phase-queue.json") or {}
+        phases = phase_queue_data.get("phases", [])
+        for phase in phases:
+            if phase.get("status") == "upcoming":
+                current_state_obj.current_phase_id = phase["phase_id"]
+                current_state_obj.current_phase_state = "phase_starting"
+                phase["status"] = "in_progress"
+                break
+        store.write_json("phase-queue.json", phase_queue_data)
+
     if level == "project":
         current_state_obj.project_state = new_state
         if new_state in ("scope_ready", "master_plan_sharpening",
@@ -322,6 +333,61 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
             current_state_obj.current_phase_state = None
     else:
         current_state_obj.current_phase_state = new_state
+        # Phase completed → propagate to project machine
+        if new_state == "phase_complete":
+            phase_queue_data = store.read_json("phase-queue.json") or {}
+            phase_list = phase_queue_data.get("phases", [])
+            for phase in phase_list:
+                if phase.get("phase_id") == current_state_obj.current_phase_id:
+                    phase["status"] = "complete"
+                    break
+            store.write_json("phase-queue.json", phase_queue_data)
+            current_state_obj.phases_complete += 1
+
+            proj_machine = create_project_machine(config)
+            proj_guards = {k: v for k, v in GUARD_MAP.items()}
+            proj_context = dict(context)
+            try:
+                fresh_queue = store.read_json("phase-queue.json")
+                if fresh_queue:
+                    proj_context["phase_queue"] = fresh_queue
+            except ValueError:
+                pass
+
+            pm_state1, pm_events1 = proj_machine.handle_event(
+                current_state_obj.project_state, "phase_completed",
+                True, proj_guards, proj_context,
+            )
+            pm_state2, pm_events2 = proj_machine.transition(
+                pm_state1, "accept_handoff", proj_guards, proj_context,
+            )
+            current_state_obj.project_state = pm_state2
+            current_state_obj.current_phase_id = None
+            current_state_obj.current_phase_state = None
+
+            all_events = pm_events1 + pm_events2
+
+            if all_phases_complete(proj_context):
+                pm_final, pm_final_events = proj_machine.handle_event(
+                    pm_state2, "all_phases_complete", True,
+                    proj_guards, proj_context,
+                )
+                current_state_obj.project_state = pm_final
+                all_events += pm_final_events
+
+            for evt in all_events:
+                event_log.append({
+                    "schema_version": 1,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "level": "project",
+                    "event": evt["event"],
+                    "from_state": evt["from_state"],
+                    "to_state": evt["to_state"],
+                    "actor": "builder",
+                    "description": _resolve_label(action, action_entry),
+                    "phase_id": None,
+                    "artifact_type": None,
+                })
 
     current_state_obj.updated_at = datetime.now(timezone.utc)
 

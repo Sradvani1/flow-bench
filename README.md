@@ -12,12 +12,11 @@ FlowBench sits **above** AI coding agents. It does not write code itself — it 
 # Install
 pip install -e .
 
-# Start the backend API server
+# Start both backend API + frontend dev server
 flowbench start
-# Or directly: uvicorn services.orchestrator.main:app
 
-# In another terminal, start the frontend
-cd apps/web && npm install && npm run dev
+# Show current project status
+flowbench status
 ```
 
 Open http://localhost:3000 to see the console. The API runs on `127.0.0.1:8000`.
@@ -35,12 +34,17 @@ Every phase runs the same sub-loop. State and artifacts persist across sessions 
 
 ## Project status
 
-FlowBench is in early development (Phase 1 / 2). Currently working:
+FlowBench is in Phase 7 — feature complete. Currently working:
 - State machine driven by `config/workflows.json` — both project and phase machines
 - API: state queries, action dispatch, event log, run records
 - Console UI: three-pane layout (phase queue, artifact panel, command pane)
 - Approval gates for risky actions (modify_files, destructive)
-- Adapter-backed actions return `adapter_not_available` — stubbed until Phase 3
+- Adapter-backed actions dispatch to OpenCode CLI for execution
+- Recovery UI for interrupted runs (inspect, retry, continue, revise the plan)
+- Blocked state card with recovery actions and "What happened" section
+- Settings screen with project info and backend health
+- `flowbench start` — managed dual-service startup with readiness polling
+- `flowbench status` — real-time project state overview
 
 ## Architecture
 
@@ -61,6 +65,8 @@ Two state machines (project + phase) are driven by `config/workflows.json`, whic
 pytest                      # all backend tests
 pytest -xvs                 # verbose, stop on first fail
 ruff check .                # lint
+bash scripts/prereq-check.sh  # verify dev environment
+bash scripts/smoke-test.sh    # end-to-end smoke test
 ```
 
 ## License
