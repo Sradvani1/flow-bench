@@ -14,6 +14,7 @@ class MockAdapter(ExecutionAdapter):
             success=True, outcome="succeeded",
             output_text='{"status": "ok"}',
         )
+        self.results_by_action = {}
         self.timeout_result = AdapterResult(
             success=False, outcome="timed_out",
             output_text="timed out",
@@ -29,10 +30,11 @@ class MockAdapter(ExecutionAdapter):
             "output_path": output_path,
             "timeout": timeout,
         })
+        action_result = self.results_by_action.get(action, self.result)
         if output_path:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            Path(output_path).write_text(self.result.output_text)
-        return self.result
+            Path(output_path).write_text(action_result.output_text)
+        return action_result
 
 
 @pytest.fixture(autouse=True)
@@ -237,6 +239,13 @@ def sample_transitions():
                 },
                 "phase_reviewing": {
                     "actions": {
+                        "_auto_transition": {
+                            "target_state": "phase_reviewing",
+                            "action_type": "adapter",
+                            "guard": None,
+                            "event": "review_generated",
+                            "adapter_action": "review_phase",
+                        },
                         "accept_review": {
                             "target_state": "phase_testing",
                             "action_type": "system",
@@ -248,6 +257,13 @@ def sample_transitions():
                 },
                 "phase_testing": {
                     "actions": {
+                        "_auto_transition": {
+                            "target_state": "phase_testing",
+                            "action_type": "adapter",
+                            "guard": None,
+                            "event": "test_executed",
+                            "adapter_action": "test_phase",
+                        },
                         "accept_test_results": {
                             "target_state": "phase_handoff",
                             "action_type": "system",

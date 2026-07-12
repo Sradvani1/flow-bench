@@ -387,18 +387,18 @@
         {
           "id": "3.3",
           "title": "10 OpenCode command templates",
-          "description": "Write all 10 command templates in adapters/opencode/commands/ using $variable syntax. Each ends with @return block writing to $output_file. Context bundle per workflow-contract.json context_bundle_rules. Discovered via filesystem glob.",
+          "description": "Write all 10 command templates in adapters/commands/ using $variable syntax. Each ends with @return block writing to $output_file. Context bundle per workflow-contract.json context_bundle_rules. Discovered via filesystem glob.",
           "files_touched": [
-            "adapters/opencode/commands/audit-existing-app.md",
-            "adapters/opencode/commands/generate-master-plan.md",
-            "adapters/opencode/commands/sharpen-plan.md",
-            "adapters/opencode/commands/generate-phase-plan.md",
-            "adapters/opencode/commands/build-phase.md",
-            "adapters/opencode/commands/review-phase.md",
-            "adapters/opencode/commands/test-phase.md",
-            "adapters/opencode/commands/fix-findings.md",
-            "adapters/opencode/commands/generate-handoff.md",
-            "adapters/opencode/commands/summarize-state.md"
+            "adapters/commands/audit-existing-app.md",
+            "adapters/commands/generate-master-plan.md",
+            "adapters/commands/sharpen-plan.md",
+            "adapters/commands/generate-phase-plan.md",
+            "adapters/commands/build-phase.md",
+            "adapters/commands/review-phase.md",
+            "adapters/commands/test-phase.md",
+            "adapters/commands/fix-findings.md",
+            "adapters/commands/generate-handoff.md",
+            "adapters/commands/summarize-state.md"
           ],
           "success_criteria": [
             "Each file is a valid OpenCode command",
@@ -805,9 +805,9 @@
         {
           "id": "7.11",
           "title": "Prerequisite verification script",
-          "description": "scripts/install.sh: checks node >=20, python3 >=3.11, opencode, uv, pnpm. Green checkmarks or red X's. Copy-pasteable install commands for missing tools. Does not modify system. Linux/macOS.",
+          "description": "scripts/prereq-check.sh: checks node >=20, python3 >=3.11, opencode, uv, pnpm. Green checkmarks or red X's. Copy-pasteable install commands for missing tools. Does not modify system. Linux/macOS.",
           "files_touched": [
-            "scripts/install.sh"
+            "scripts/prereq-check.sh"
           ],
           "success_criteria": [
             "Clear pass/fail for each prerequisite",

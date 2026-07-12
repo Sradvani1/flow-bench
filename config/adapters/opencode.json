@@ -69,6 +69,10 @@
     "summarize_state": {
       "timeout_seconds": 60,
       "template": "summarize-state.md"
+    },
+    "_auto_transition": {
+      "timeout_seconds": 300,
+      "template": ""
     }
   }
 }

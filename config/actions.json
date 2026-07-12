@@ -257,5 +257,12 @@
     "risk_category": "destructive",
     "risk_explanation": "Abandoning a phase discards any uncompleted work. The phase can be restarted later.",
     "action_type": "system"
+  },
+  "_auto_transition": {
+    "label": "Auto transition",
+    "description": "Internal auto-transition action for review and test",
+    "risk_category": null,
+    "risk_explanation": null,
+    "action_type": "adapter"
   }
 }

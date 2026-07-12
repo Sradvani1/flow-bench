@@ -66,6 +66,7 @@ class ActionService:
         body: Optional[dict],
         config: dict,
         actions_config: dict,
+        adapter_action_override: str | None = None,
     ) -> dict | JSONResponse:
         # ── PREFLIGHT ──────────────────────────────────────────────
 
@@ -221,9 +222,10 @@ class ActionService:
             resolved_action = action
 
         # 6. Assemble context bundle
+        adapter_action = adapter_action_override or resolved_action
         try:
             context_bundle = self.context_service.assemble(
-                resolved_action, current_state
+                adapter_action, current_state
             )
         except ValueError as e:
             return JSONResponse(
@@ -262,13 +264,13 @@ class ActionService:
             )
 
         # 9. Record RunRecord metadata
-        template_name = self._get_template_name(resolved_action)
+        template_name = self._get_template_name(adapter_action)
         template_path = self._resolve_template_path(template_name)
         template_version = (
             self._hash_file(template_path) if template_path.exists() else None
         )
 
-        artifact_refs = self._build_artifact_refs(resolved_action, current_state)
+        artifact_refs = self._build_artifact_refs(adapter_action, current_state)
 
         context_hash = self.run_store.compute_context_hash(context_bundle)
 
@@ -298,8 +300,12 @@ class ActionService:
                 self._make_event(evt, resolved_action, current_state, level)
             )
 
+        # Capture prior phase state for auto-dispatch (intermediate state,
+        # before completion events)
+        prior_phase_state = current_state.current_phase_state
+
         # 12. Execute adapter
-        adapter_config_entry = self._get_adapter_config(resolved_action)
+        adapter_config_entry = self._get_adapter_config(adapter_action)
         timeout = adapter_config_entry.get("timeout_seconds", 120)
 
         output_path = str(
@@ -314,7 +320,7 @@ class ActionService:
 
         try:
             result = await self.adapter.execute(
-                action=resolved_action,
+                action=adapter_action,
                 context_bundle=context_bundle,
                 run_id=run.run_id,
                 working_dir=self.repo_path,
@@ -327,9 +333,10 @@ class ActionService:
             )
 
         # 13. Interpret result → write stage artifact
+        parsed_output = None
         if result.success:
             artifact_filename = self._map_adapter_action_to_artifact(
-                resolved_action, current_state
+                adapter_action, current_state
             )
             if artifact_filename:
                 try:
@@ -352,6 +359,7 @@ class ActionService:
                                 f"does not match active repository "
                                 f"'{current_state.repo_path}'"
                             )
+                    parsed_output = output_data
                     self.store.write_json(artifact_filename, output_data)
                 except (json.JSONDecodeError, ValueError, OSError) as e:
                     result = AdapterResult(
@@ -371,21 +379,50 @@ class ActionService:
             intermediate_config.get("events", {})
         )
 
-        if has_completion_events:
+        effective_success = result.success
+        if result.success and adapter_action == "test_phase" and isinstance(parsed_output, dict):
+            summary = parsed_output.get("summary", {})
+            if isinstance(summary, dict) and summary.get("failed", 0) > 0:
+                effective_success = False
+
+        if has_completion_events and result.success:
             event_key = self._find_completion_event_key(
-                intermediate_config, result.success
+                intermediate_config, effective_success
             )
             try:
                 final_state, completion_events = machine.handle_event(
                     intermediate_state,
                     event_key,
-                    result.success,
+                    effective_success,
                     GUARD_MAP,
                     {},
                 )
             except StateTransitionError:
                 final_state = intermediate_state
                 completion_events = []
+        elif has_completion_events and not result.success:
+            if adapter_action == "test_phase":
+                final_state = "phase_blocked" if level == "phase" else "project_blocked"
+                completion_events = [{
+                    "event": "adapter_failed",
+                    "from_state": intermediate_state,
+                    "to_state": final_state,
+                }]
+            else:
+                event_key = self._find_completion_event_key(
+                    intermediate_config, result.success
+                )
+                try:
+                    final_state, completion_events = machine.handle_event(
+                        intermediate_state,
+                        event_key,
+                        result.success,
+                        GUARD_MAP,
+                        {},
+                    )
+                except StateTransitionError:
+                    final_state = intermediate_state
+                    completion_events = []
         else:
             final_state = intermediate_state
             completion_events = []
@@ -405,7 +442,7 @@ class ActionService:
                 self._make_event(evt, resolved_action, current_state, level)
             )
 
-        # 16. Complete RunRecord
+        # 16. Complete RunRecord (parent)
         self.run_store.complete_run(
             run_id=run.run_id,
             status=result.outcome,
@@ -415,8 +452,23 @@ class ActionService:
             ),
         )
 
+        # 16.5 Auto-dispatch on phase state entry
+        label_entry = None if adapter_action_override else action_entry
+        label = self._resolve_label(adapter_action, label_entry)
+        if level == "phase":
+            prior = CurrentState(**current_state.model_dump())
+            prior.current_phase_state = prior_phase_state
+            auto_result = await self._check_auto_dispatch(
+                prior, current_state, config, actions_config
+            )
+            if auto_result:
+                child_response, child_adapter = auto_result
+                merged = dict(child_response)
+                merged["message"] = f"{label}. {child_response.get('message', '')}"
+                merged["auto_dispatched"] = [child_adapter]
+                return merged
+
         # 17. Return
-        label = self._resolve_label(resolved_action, action_entry)
         return {
             "status": "ok" if result.success else "failed",
             "outcome": result.outcome,
@@ -426,6 +478,43 @@ class ActionService:
             ),
             "run_id": run.run_id,
         }
+
+    async def _check_auto_dispatch(
+        self,
+        prior_state: CurrentState,
+        new_state: CurrentState,
+        config: dict,
+        actions_config: dict,
+    ) -> tuple[dict, str] | None:
+        if prior_state.current_phase_state == new_state.current_phase_state:
+            return None
+
+        phase_state = new_state.current_phase_state
+        if not phase_state:
+            return None
+
+        machine = create_phase_machine(config)
+        transitions = machine.transitions
+        state_config = transitions.get(phase_state, {})
+        auto_entry = state_config.get("actions", {}).get("_auto_transition", {})
+        if not auto_entry or auto_entry.get("action_type") != "adapter":
+            return None
+
+        adapter_action = auto_entry.get("adapter_action")
+        if not adapter_action:
+            return None
+
+        result = await self.dispatch_adapter_action(
+            "_auto_transition",
+            {"confirmed": True},
+            config,
+            actions_config,
+            adapter_action_override=adapter_action,
+        )
+
+        if isinstance(result, JSONResponse):
+            return None
+        return (result, adapter_action)
 
     def _find_completion_event_key(
         self, state_config: dict, success: bool

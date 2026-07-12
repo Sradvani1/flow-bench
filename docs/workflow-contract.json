@@ -11,7 +11,8 @@
     "Run persistence: every adapter-backed action creates a RunRecord. Interrupted runs are detected on startup and surfaced to the builder.",
     "Phase 2 = console shell only. Phase 4 = all artifact renderers and timeline. No overlap.",
     "Backend is the safety authority for approval. The UI is a convenience layer. A risky action is never accepted merely because a client claims it was previously displayed in a confirmation dialog. The backend independently checks the confirmed flag against the configured risk_category for the requested action.",
-    "Phase 1 does not implement adapter-backed actions. POST /actions for adapter-backed actions returns adapter_not_available until Phase 3. Only state-only actions (action_type: system or navigation) work in Phase 1."
+    "Phase 1 does not implement adapter-backed actions. POST /actions for adapter-backed actions returns adapter_not_available until Phase 3. Only state-only actions (action_type: system or navigation) work in Phase 1.",
+    "Underscore-prefixed internal actions (_auto_transition) are valid for engine dispatch but excluded from user-visible valid actions. They document stage-entry auto-dispatch behavior and keep the contract in sync with workflows.json."
   ],
   "artifact_layout": {
     "description": "V1 layout: all FlowBench state lives in a single .flowbench/ directory inside the selected project repo. No project-name subdirectory. Flat artifact namespace (phase-specific artifacts use phase-<id> suffixes). This layout is locked for V1 — a future multi-project feature requires a separate scope decision and must not leak its structure into V1.",
@@ -650,8 +651,17 @@
       "on_entry_artifact": "review-findings",
       "actions": {
         "_auto_transition": {
-          "description": "Review runs automatically on build completion. Findings are saved as review-findings.json.",
-          "adapter_action": "review_phase"
+          "label": "Auto transition",
+          "description": "Internal auto-transition. Fires review_phase adapter on entry to phase_reviewing.",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_reviewing",
+          "artifact_created": "review-findings.json (auto-generated)",
+          "event_emitted": "review_generated",
+          "adapter_action": "review_phase",
+          "recovery": null,
+          "action_type": "adapter"
         },
         "accept_review": {
           "label": "Accept review",
@@ -700,8 +710,17 @@
       "on_entry_artifact": "test-results",
       "actions": {
         "_auto_transition": {
-          "description": "Tests run automatically. Results saved as test-results.json.",
-          "adapter_action": "test_phase"
+          "label": "Auto transition",
+          "description": "Internal auto-transition. Fires test_phase adapter on entry to phase_testing.",
+          "risk_category": null,
+          "risk_explanation": null,
+          "preconditions": [],
+          "target_state": "phase_testing",
+          "artifact_created": "test-results.json (auto-generated)",
+          "event_emitted": "test_executed",
+          "adapter_action": "test_phase",
+          "recovery": null,
+          "action_type": "adapter"
         },
         "accept_test_results": {
           "label": "Accept test results",

@@ -303,6 +303,13 @@
       },
       "phase_reviewing": {
         "actions": {
+          "_auto_transition": {
+            "target_state": "phase_reviewing",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "review_generated",
+            "adapter_action": "review_phase"
+          },
           "accept_review": {
             "target_state": "phase_testing",
             "action_type": "system",
@@ -326,6 +333,13 @@
       },
       "phase_testing": {
         "actions": {
+          "_auto_transition": {
+            "target_state": "phase_testing",
+            "action_type": "adapter",
+            "guard": null,
+            "event": "test_executed",
+            "adapter_action": "test_phase"
+          },
           "accept_test_results": {
             "target_state": "phase_handoff",
             "action_type": "system",

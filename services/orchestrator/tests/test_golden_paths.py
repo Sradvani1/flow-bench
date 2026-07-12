@@ -121,18 +121,11 @@ class TestGoldenPath:
         resp = client.post("/api/v1/actions/start_building", json={"confirmed": True})
         assert resp.status_code == 200
 
-        store = FileStore(".")
-        store.write_json("review-findings-phase_001.json", {
-            "schema_version": 1, "findings": "OK",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
-        store.write_json("test-results-phase_001.json", {
-            "schema_version": 1, "results": "Pass",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"summary": {"passed": 5, "failed": 0}}),
+        )
         resp = client.post("/api/v1/actions/accept_review")
-        assert resp.status_code == 200
-        resp = client.post("/api/v1/actions/accept_test_results")
         assert resp.status_code == 200
 
         mock_adapter.result = AdapterResult(
@@ -181,18 +174,11 @@ class TestGoldenPath:
         resp = client.post("/api/v1/actions/start_building", json={"confirmed": True})
         assert resp.status_code == 200
 
-        store = FileStore(".")
-        store.write_json("review-findings-phase_002.json", {
-            "schema_version": 1, "findings": "OK",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
-        store.write_json("test-results-phase_002.json", {
-            "schema_version": 1, "results": "Pass",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"summary": {"passed": 5, "failed": 0}}),
+        )
         resp = client.post("/api/v1/actions/accept_review")
-        assert resp.status_code == 200
-        resp = client.post("/api/v1/actions/accept_test_results")
         assert resp.status_code == 200
 
         mock_adapter.result = AdapterResult(
@@ -291,24 +277,12 @@ class TestGoldenPath:
         assert resp.status_code == 200, resp.json()
         assert resp.json()["new_state"] == "phase_reviewing"
 
-        # accept_review
+        # accept_review (auto-dispatches test_phase → phase_handoff)
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"summary": {"passed": 5, "failed": 0}}),
+        )
         resp = client.post("/api/v1/actions/accept_review")
-        assert resp.status_code == 200
-        assert resp.json()["new_state"] == "phase_testing"
-
-        # accept_test_results
-        store = FileStore(".")
-        store.write_json("review-findings-phase_001.json", {
-            "schema_version": 1,
-            "findings": "Build looks good",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
-        store.write_json("test-results-phase_001.json", {
-            "schema_version": 1,
-            "results": "All tests pass",
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        })
-        resp = client.post("/api/v1/actions/accept_test_results")
         assert resp.status_code == 200
         assert resp.json()["new_state"] == "phase_handoff"
 
@@ -437,21 +411,11 @@ class TestGoldenPath:
             resp = client.post("/api/v1/actions/start_building", json={"confirmed": True})
             assert resp.status_code == 200, resp.json()
 
-            store = FileStore(".")
-            store.write_json("review-findings-phase_001.json", {
-                "schema_version": 1,
-                "findings": "Build looks good",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
-            store.write_json("test-results-phase_001.json", {
-                "schema_version": 1,
-                "results": "All tests pass",
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
+            mock_adapter.result = AdapterResult(
+                success=True, outcome="succeeded",
+                output_text=json.dumps({"summary": {"passed": 5, "failed": 0}}),
+            )
             resp = client.post("/api/v1/actions/accept_review")
-            assert resp.status_code == 200
-
-            resp = client.post("/api/v1/actions/accept_test_results")
             assert resp.status_code == 200
 
             mock_adapter.result = AdapterResult(
@@ -550,10 +514,10 @@ class TestGoldenPath:
         assert resp.status_code == 200, resp.json()
         assert resp.json()["new_state"] == "phase_reviewing"
 
-        # Verify adapter was called
+        # Verify adapter was called (auto-dispatch adds review_phase call)
         assert len(mock_adapter.calls) >= 1
-        last_call = mock_adapter.calls[-1]
-        assert last_call["action"] == "start_building"
+        build_calls = [c for c in mock_adapter.calls if c["action"] == "start_building"]
+        assert len(build_calls) >= 1
 
     def test_invalid_transition_rejected(self):
         """Invalid transition returns 400 with clear error."""
@@ -589,3 +553,225 @@ class TestGoldenPath:
 
         # Re-register MockAdapter for subsequent tests
         action_service.set_default_adapter(mock_adapter)
+
+
+class TestAutoDispatch:
+    def _setup_phase_ready_to_build(self):
+        store = FileStore(".")
+        store.write_json("scope.json", {
+            "schema_version": 1, "content": "Build an app",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("master-plan.json", {
+            "schema_version": 1,
+            "phases": [{"id": "phase_001", "name": "Setup"}],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("phase-plan-phase_001.json", {
+            "schema_version": 1, "plan": "Test plan",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("handoff-phase_001.json", {
+            "schema_version": 1, "handoff": "Prior handoff",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("current-state.json", {
+            "schema_version": 1,
+            "project_display_name": "Test",
+            "repo_path": str(Path.cwd()),
+            "mode": "new_build",
+            "project_state": "phase_in_progress",
+            "current_phase_id": "phase_001",
+            "current_phase_state": "phase_ready_to_build",
+            "total_phases": 1,
+            "phases_complete": 0,
+            "adapter": "opencode",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    def _setup_phase_reviewing(self):
+        self._setup_phase_ready_to_build()
+        store = FileStore(".")
+        store.write_json("build-summary-phase_001.json", {
+            "schema_version": 1, "summary": "Build complete",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("current-state.json", {
+            "schema_version": 1,
+            "project_display_name": "Test",
+            "repo_path": str(Path.cwd()),
+            "mode": "new_build",
+            "project_state": "phase_in_progress",
+            "current_phase_id": "phase_001",
+            "current_phase_state": "phase_reviewing",
+            "total_phases": 1,
+            "phases_complete": 0,
+            "adapter": "opencode",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    def test_build_completes_then_review_auto_dispatches(self, mock_adapter):
+        self._setup_phase_ready_to_build()
+        resp = client.post("/api/v1/actions/start_building", json={"confirmed": True})
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["new_state"] == "phase_reviewing"
+        assert "auto_dispatched" in data
+        assert "review_phase" in data["auto_dispatched"]
+
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        auto_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        assert len(auto_runs) >= 1
+        for run in auto_runs:
+            assert run["status"] == "succeeded"
+
+        run_actions = [r["action"] for r in runs[:2]]
+        assert "start_building" in run_actions
+        assert "_auto_transition" in run_actions
+
+        build_rr = next(r for r in runs if r["action"] == "start_building")
+        review_rr = next(r for r in runs if r["action"] == "_auto_transition")
+        b_fin = build_rr.get("finished_at")
+        r_start = review_rr.get("started_at")
+        if b_fin and r_start:
+            assert b_fin < r_start
+
+        actions_resp = client.get("/api/v1/actions")
+        action_names = [a["action"] for a in actions_resp.json()]
+        assert "_auto_transition" not in action_names
+
+    def test_review_self_transition_does_not_redispatch(self, mock_adapter):
+        self._setup_phase_ready_to_build()
+        client.post("/api/v1/actions/start_building", json={"confirmed": True})
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        review_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        assert len(review_runs) == 1
+        state_resp = client.get("/api/v1/state")
+        assert state_resp.json()["current_phase_state"] == "phase_reviewing"
+
+    def test_accept_review_triggers_test_passed(self, mock_adapter):
+        self._setup_phase_reviewing()
+        store = FileStore(".")
+        store.write_json("review-findings-phase_001.json", {
+            "schema_version": 1, "findings": "OK",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"summary": {"passed": 5, "failed": 0}}),
+        )
+        resp = client.post("/api/v1/actions/accept_review")
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["new_state"] == "phase_handoff"
+        assert "auto_dispatched" in data
+        assert "test_phase" in data["auto_dispatched"]
+
+        events_resp = client.get("/api/v1/events")
+        events = events_resp.json()["events"]
+        event_names = [e["event"] for e in events]
+        assert "tests_passed" in event_names
+        phase_id = store.read_json("current-state.json")["current_phase_id"]
+        assert store.read_json(f"test-results-{phase_id}.json") is not None
+
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        test_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        for run in test_runs:
+            assert run["status"] == "succeeded"
+
+    def test_accept_review_triggers_test_failed(self, mock_adapter):
+        self._setup_phase_reviewing()
+        store = FileStore(".")
+        store.write_json("review-findings-phase_001.json", {
+            "schema_version": 1, "findings": "Issues found",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"summary": {"passed": 3, "failed": 2}}),
+        )
+        resp = client.post("/api/v1/actions/accept_review")
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["new_state"] == "phase_fixing"
+        assert "auto_dispatched" in data
+        assert "test_phase" in data["auto_dispatched"]
+
+        events_resp = client.get("/api/v1/events")
+        events = events_resp.json()["events"]
+        event_names = [e["event"] for e in events]
+        assert "tests_failed" in event_names
+
+        phase_id = store.read_json("current-state.json")["current_phase_id"]
+        assert store.read_json(f"test-results-{phase_id}.json") is not None
+
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        test_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        for run in test_runs:
+            assert run["status"] == "succeeded"
+
+    def test_test_phase_adapter_timed_out(self, mock_adapter):
+        self._setup_phase_reviewing()
+        store = FileStore(".")
+        store.write_json("review-findings-phase_001.json", {
+            "schema_version": 1, "findings": "OK",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mock_adapter.results_by_action["test_phase"] = mock_adapter.timeout_result
+        resp = client.post("/api/v1/actions/accept_review")
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["new_state"] == "phase_blocked"
+
+        phase_id = store.read_json("current-state.json")["current_phase_id"]
+        assert store.read_json(f"test-results-{phase_id}.json") is None
+
+        events_resp = client.get("/api/v1/events")
+        events = events_resp.json()["events"]
+        event_names = [e["event"] for e in events]
+        assert "tests_failed" not in event_names
+        assert "adapter_failed" in event_names
+
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        test_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        for run in test_runs:
+            assert run["status"] == "timed_out"
+
+    def test_fix_findings_returns_to_review_and_dispatches_review(self, mock_adapter):
+        self._setup_phase_reviewing()
+        store = FileStore(".")
+        store.write_json("review-findings-phase_001.json", {
+            "schema_version": 1, "findings": "Issues found",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"findings": "Issues fixed"}),
+        )
+        resp = client.post("/api/v1/actions/fix_findings", json={"confirmed": True})
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["new_state"] == "phase_reviewing"
+        assert "auto_dispatched" in data
+        assert "review_phase" in data["auto_dispatched"]
+
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        auto_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        assert len(auto_runs) == 1
+        assert auto_runs[0]["status"] == "succeeded"
+
+        state_resp = client.get("/api/v1/state")
+        assert state_resp.json()["current_phase_state"] == "phase_reviewing"
+
+        phase_id = store.read_json("current-state.json")["current_phase_id"]
+        assert store.read_json(f"review-findings-{phase_id}.json") is not None
+
+        actions_resp = client.get("/api/v1/actions")
+        action_names = [a["action"] for a in actions_resp.json()]
+        assert "_auto_transition" not in action_names

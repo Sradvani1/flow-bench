@@ -60,6 +60,7 @@ ACTION_LABELS = {
     "retry": "Retry",
     "replan_phase": "Re-plan phase",
     "abandon_phase": "Abandon phase",
+    "_auto_transition": "Auto transition",
 }
 
 

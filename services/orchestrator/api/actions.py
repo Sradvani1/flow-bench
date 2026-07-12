@@ -413,6 +413,21 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         json.loads(current_state_obj.model_dump_json())
     )
 
+    # Auto-dispatch on phase state entry (system actions only)
+    if level == "phase" and current_phase_state != current_state_obj.current_phase_state:
+        from services.orchestrator.services.action_service import ActionService
+        service = ActionService(".")
+        prior = CurrentState(**current_state_obj.model_dump())
+        prior.current_phase_state = current_phase_state
+        auto_result = await service._check_auto_dispatch(
+            prior, current_state_obj, config, actions_config
+        )
+        if auto_result:
+            child_response, adapter = auto_result
+            merged = dict(child_response)
+            merged["auto_dispatched"] = [adapter]
+            return merged
+
     label = _resolve_label(action, action_entry)
     return {
         "status": "ok",

@@ -30,6 +30,7 @@ WORKFLOWS = load_json("workflows.json")
 ACTIONS = load_json("actions.json")
 POLICIES = load_json("policies.json")
 ADAPTER_CONFIG = load_json("adapters/opencode.json")
+CONTRACT_PATH = Path(__file__).parents[3] / "docs" / "workflow-contract.json"
 
 
 # Cross-machine transitions from phase machine → valid project states
@@ -197,3 +198,23 @@ class TestContractValidation:
                         assert len(parts[2]) == 3, (
                             f"Phase number should be 3 digits: {action_name}"
                         )
+
+    def test_contract_auto_transition_in_sync(self):
+        with open(CONTRACT_PATH) as f:
+            contract = json.load(f)
+
+        auto_dispatch_states = {"phase_reviewing", "phase_testing"}
+        for state_name in auto_dispatch_states:
+            wf_states = WORKFLOWS.get("phase_machine", {}).get("states", {})
+            wf_entry = wf_states.get(state_name, {}).get("actions", {}).get("_auto_transition", {})
+            ct_states = contract.get("states", {})
+            ct_entry = ct_states.get(state_name, {}).get("actions", {}).get("_auto_transition", {})
+            assert wf_entry, f"_auto_transition missing from workflows.json {state_name}"
+            assert ct_entry, f"_auto_transition missing from contract {state_name}"
+            assert wf_entry.get("adapter_action") == ct_entry.get("adapter_action"), (
+                f"adapter_action mismatch for {state_name}._auto_transition"
+            )
+
+        assert "_auto_transition" in ACTIONS, (
+            "_auto_transition missing from actions.json"
+        )

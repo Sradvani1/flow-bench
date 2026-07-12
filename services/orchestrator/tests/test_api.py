@@ -905,3 +905,114 @@ def _setup_phase_ready_to_build():
         "adapter": "opencode",
         "updated_at": datetime.now(timezone.utc).isoformat(),
     })
+
+
+class TestAutoDispatch:
+    def test_auto_transition_not_in_get_actions(self):
+        resp = client.get("/api/v1/actions")
+        assert resp.status_code == 200
+        action_names = [a["action"] for a in resp.json()]
+        assert "_auto_transition" not in action_names
+        assert "review_phase" not in action_names
+        assert "test_phase" not in action_names
+
+    def test_auto_dispatch_run_record_lifecycle(self, mock_adapter):
+        store = FileStore(".")
+        store.write_json("scope.json", {
+            "schema_version": 1,
+            "content": "Build an app",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("master-plan.json", {
+            "schema_version": 1,
+            "phases": [{"id": "phase_001", "name": "Setup"}],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("phase-plan-phase_001.json", {
+            "schema_version": 1,
+            "plan": "Test plan",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("handoff-phase_001.json", {
+            "schema_version": 1,
+            "handoff": "Prior handoff",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("current-state.json", {
+            "schema_version": 1,
+            "project_display_name": "Test",
+            "repo_path": str(Path.cwd()),
+            "mode": "new_build",
+            "project_state": "phase_in_progress",
+            "current_phase_id": "phase_001",
+            "current_phase_state": "phase_ready_to_build",
+            "total_phases": 1,
+            "phases_complete": 0,
+            "adapter": "opencode",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        resp = client.post("/api/v1/actions/start_building", json={"confirmed": True})
+        assert resp.status_code == 200, resp.json()
+
+        runs_resp = client.get("/api/v1/runs")
+        runs = runs_resp.json().get("runs", [])
+        assert len(runs) >= 2
+        run_actions = [r["action"] for r in runs[:2]]
+        assert "start_building" in run_actions
+        assert "_auto_transition" in run_actions
+        for r in runs[:2]:
+            rid = r["run_id"]
+            assert r.get("template_version") is not None, f"{rid} no template_version"
+            assert r.get("working_directory") is not None, f"{rid} no working_directory"
+            assert r.get("command_context_hash") is not None, f"{rid} no command_context_hash"
+        auto_runs = [r for r in runs if r["action"] == "_auto_transition"]
+        for run in auto_runs:
+            assert run.get("phase_id") == "phase_001"
+
+    def test_accept_review_system_action_returns_settled_state(self, mock_adapter):
+        store = FileStore(".")
+        store.write_json("scope.json", {
+            "schema_version": 1,
+            "content": "Build an app",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("master-plan.json", {
+            "schema_version": 1,
+            "phases": [{"id": "phase_001", "name": "Setup"}],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("phase-plan-phase_001.json", {
+            "schema_version": 1,
+            "plan": "Test plan",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("build-summary-phase_001.json", {
+            "schema_version": 1,
+            "summary": "Build complete",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        store.write_json("current-state.json", {
+            "schema_version": 1,
+            "project_display_name": "Test",
+            "repo_path": str(Path.cwd()),
+            "mode": "new_build",
+            "project_state": "phase_in_progress",
+            "current_phase_id": "phase_001",
+            "current_phase_state": "phase_reviewing",
+            "total_phases": 1,
+            "phases_complete": 0,
+            "adapter": "opencode",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        mock_adapter.result = AdapterResult(
+            success=True, outcome="succeeded",
+            output_text=json.dumps({"summary": {"passed": 5, "failed": 0}}),
+        )
+        resp = client.post("/api/v1/actions/accept_review")
+        assert resp.status_code == 200, resp.json()
+        data = resp.json()
+        assert data["new_state"] in ("phase_handoff", "phase_testing")
+        if "auto_dispatched" in data:
+            assert "test_phase" in data["auto_dispatched"]
+        state_resp = client.get("/api/v1/state")
+        assert state_resp.json()["current_phase_state"] is not None

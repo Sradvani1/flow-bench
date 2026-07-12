@@ -27,6 +27,9 @@ class ContextService:
             for a_name, a_def in state_def.get("actions", {}).items():
                 if a_name == action:
                     return a_def.get("adapter_action")
+        for rule in self.contract.get("context_bundle_rules", {}).get("rules", []):
+            if rule.get("adapter_action") == action:
+                return action
         return None
 
     def _all_states(self) -> list[dict]:

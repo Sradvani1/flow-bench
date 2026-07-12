@@ -173,12 +173,11 @@ def test_cleanup_on_process_crash():
                 time.sleep(2)
         assert frontend_ok, "Frontend not reachable before crash test"
 
-        # Find and kill the backend process (it's a child of the CLI subprocess group)
+        # Find and kill the backend process (it's a child of the CLI process)
         import subprocess as sp
-        pgid = os.getpgid(proc.pid)
-        # Kill all uvicorn children in the process group
+        # Kill the backend child by its parent PID (the CLI process)
         sp.run(
-            ["pkill", "-f", "-P", str(pgid), "uvicorn"],
+            ["pkill", "-f", "-P", str(proc.pid), "services.orchestrator.main"],
             capture_output=True, timeout=5,
         )
         time.sleep(2)

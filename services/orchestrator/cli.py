@@ -37,13 +37,11 @@ def _wait_for_url(url: str, timeout: float, interval: float) -> bool:
 
 def _start_backend() -> subprocess.Popen:
     if _HAS_UV:
-        cmd = ["uv", "run", "uvicorn",
-               "services.orchestrator.main:app",
-               "--host", "127.0.0.1", "--port", "8000"]
+        cmd = ["uv", "run", "python", "-m",
+               "services.orchestrator.main"]
     else:
-        cmd = [sys.executable, "-m", "uvicorn",
-               "services.orchestrator.main:app",
-               "--host", "127.0.0.1", "--port", "8000"]
+        cmd = [sys.executable, "-m",
+               "services.orchestrator.main"]
     proc = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
