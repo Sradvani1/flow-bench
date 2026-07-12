@@ -1,11 +1,5 @@
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
 import { formatRelative } from "@/lib/utils";
-import { Check, AlertTriangle } from "lucide-react";
+import { CheckCircle, AlertTriangle } from "lucide-react";
 
 export function HandoffCard({ data }: { data: Record<string, unknown> }) {
   if (!data) return null;
@@ -15,58 +9,64 @@ export function HandoffCard({ data }: { data: Record<string, unknown> }) {
   const generatedAt = String(data.generated_at ?? "");
   const completed = (data.completed_tasks as string[]) ?? [];
   const unresolved = (data.unresolved_issues as string[]) ?? [];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">{phaseName} Handoff</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+    <div className="bg-surface-2 shadow-sm rounded-xl p-6 max-w-[720px] mx-auto">
+      <span className="inline-flex items-center rounded-full bg-surface-inset px-2.5 py-0.5 text-xs font-medium text-text-muted mb-4">
+        Handoff
+      </span>
+      <h2 className="font-display text-xl text-text mb-4">{phaseName || "Phase"} Handoff</h2>
+      <div className="h-px bg-divider mb-4" />
+
+      <div className="space-y-6 max-w-[65ch]">
         {completed.length > 0 && (
-          <div>
-            <h4 className="font-semibold mb-2">Completed Tasks</h4>
-            <ul className="space-y-1">
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-2">What Was Built</h3>
+            <ul className="space-y-2">
               {completed.map((t, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <Check className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+                <li key={i} className="flex items-start gap-2 text-sm text-text-muted">
+                  <CheckCircle className="h-4 w-4 text-success mt-0.5 shrink-0" />
                   <span>{t}</span>
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         )}
+
         {unresolved.length > 0 && (
-          <div>
-            <h4 className="font-semibold mb-2">Unresolved Issues</h4>
-            <ul className="space-y-1">
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-2">Known Issues</h3>
+            <ul className="space-y-2">
               {unresolved.map((u, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+                <li key={i} className="flex items-start gap-2 text-sm text-text-muted">
+                  <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
                   <span>{u}</span>
                 </li>
               ))}
             </ul>
-          </div>
+          </section>
         )}
+
         {nextPhase && (
-          <div className="rounded-lg border bg-muted/50 p-3">
-            <p className="font-semibold text-xs text-muted-foreground">
-              Next Phase
-            </p>
-            <p className="mt-1">{nextPhase}</p>
-          </div>
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-2">Context for Next Phase</h3>
+            <div className="rounded-lg border border-divider bg-surface-inset p-4">
+              <p className="text-sm text-text-muted leading-relaxed">{nextPhase}</p>
+            </div>
+          </section>
         )}
+
         {notes && (
-          <div>
-            <h4 className="font-semibold mb-1">Notes</h4>
-            <p className="text-muted-foreground">{notes}</p>
-          </div>
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-2">Notes</h3>
+            <p className="text-sm text-text-muted leading-relaxed">{notes}</p>
+          </section>
         )}
-        {generatedAt && (
-          <p className="text-xs text-muted-foreground">
-            Generated {formatRelative(generatedAt)}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {generatedAt && (
+        <p className="text-xs text-text-faint mt-6">Generated {formatRelative(generatedAt)}</p>
+      )}
+    </div>
   );
 }

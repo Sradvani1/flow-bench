@@ -118,7 +118,7 @@ const STAGE_ARTIFACT_MAP: Record<string, ArtifactMapping> = {
   project_complete: {
     artifactKey: "complete",
     filename: null,
-    rendererName: "EmptyStateCard",
+    rendererName: "ProjectCompleteScreen",
     emptyMessage: "Project complete.",
   },
 };

@@ -4,56 +4,134 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    /* Phase 9 design tokens */
+    --color-bg: #f5f4f0;
+    --color-surface: #f9f8f5;
+    --color-surface-2: #fdfcfa;
+    --color-surface-inset: #edeae5;
+    --color-divider: #dcd9d5;
+    --color-border: #d0cdc8;
+    --color-text: #1e1c17;
+    --color-text-muted: #7a7872;
+    --color-text-faint: #b5b4af;
+    --color-text-inverse: #f9f8f4;
+    --color-primary: #0a6b6e;
+    --color-primary-hover: #095355;
+    --color-primary-active: #063a3c;
+    --color-primary-muted: #d4e4e4;
+    --color-success: #3d7c24;
+    --color-success-muted: #d3e4cc;
+    --color-warning: #9a4a00;
+    --color-warning-muted: #f0dfd0;
+    --color-error: #9b2c2c;
+    --color-error-muted: #f2d9d9;
+    --color-info: #2c5fa0;
+    --color-info-muted: #d0dcf0;
+    --shadow-sm: 0 1px 2px oklch(0.15 0.01 80 / 0.05);
+    --shadow-md: 0 4px 12px oklch(0.15 0.01 80 / 0.08);
+    --shadow-lg: 0 12px 32px oklch(0.15 0.01 80 / 0.12);
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-full: 9999px;
+    --transition-fast: 120ms cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-interactive: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    --transition-slow: 280ms cubic-bezier(0.16, 1, 0.3, 1);
+    --text-xs: clamp(0.75rem, 0.7rem + 0.25vw, 0.875rem);
+    --text-sm: clamp(0.875rem, 0.8rem + 0.35vw, 1rem);
+    --text-base: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+    --text-lg: clamp(1.125rem, 1rem + 0.75vw, 1.5rem);
+    --text-xl: clamp(1.5rem, 1.2rem + 1.25vw, 2.25rem);
+    --text-2xl: clamp(2rem, 1.2rem + 2.5vw, 3.5rem);
+
+    /* shadcn/ui compatibility aliases */
+    --background: var(--color-bg);
+    --foreground: var(--color-text);
+    --card: var(--color-surface-2);
+    --card-foreground: var(--color-text);
+    --popover: var(--color-surface-2);
+    --popover-foreground: var(--color-text);
+    --primary-foreground: var(--color-text-inverse);
+    --secondary: var(--color-surface-inset);
+    --secondary-foreground: var(--color-text);
+    --muted: var(--color-surface-inset);
+    --muted-foreground: var(--color-text-muted);
+    --accent: var(--color-surface-inset);
+    --accent-foreground: var(--color-text);
+    --destructive: var(--color-error);
+    --destructive-foreground: var(--color-text-inverse);
+    --input: var(--color-border);
+    --ring: var(--color-primary);
+    --radius: var(--radius-md);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-  }
-}
+    --color-bg: #141312;
+    --color-surface: #1a1917;
+    --color-surface-2: #1e1d1b;
+    --color-surface-inset: #131211;
+    --color-divider: #252422;
+    --color-border: #302e2c;
+    --color-text: #ccc9c4;
+    --color-text-muted: #7a7872;
+    --color-text-faint: #4a4946;
+    --color-text-inverse: #1a1917;
+    --color-primary: #4a9ea8;
+    --color-primary-hover: #3a8d97;
+    --color-primary-active: #2a7680;
+    --color-primary-muted: #1e3032;
+    --color-success: #5ea83e;
+    --color-success-muted: #1e2e18;
+    --color-warning: #c97c3a;
+    --color-warning-muted: #2e1e0e;
+    --color-error: #c85050;
+    --color-error-muted: #2e1515;
+    --color-info: #4e82cf;
+    --color-info-muted: #131d2e;
+    --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.2);
+    --shadow-md: 0 4px 12px oklch(0 0 0 / 0.3);
+    --shadow-lg: 0 12px 32px oklch(0 0 0 / 0.4);
 
-@layer base {
+    --background: var(--color-bg);
+    --foreground: var(--color-text);
+    --card: var(--color-surface-2);
+    --card-foreground: var(--color-text);
+    --popover: var(--color-surface-2);
+    --popover-foreground: var(--color-text);
+    --primary-foreground: var(--color-text-inverse);
+    --secondary: var(--color-surface-inset);
+    --secondary-foreground: var(--color-text);
+    --muted: var(--color-surface-inset);
+    --muted-foreground: var(--color-text-muted);
+    --accent: var(--color-surface-inset);
+    --accent-foreground: var(--color-text);
+    --destructive: var(--color-error);
+    --destructive-foreground: var(--color-text-inverse);
+    --input: var(--color-border);
+    --ring: var(--color-primary);
+  }
+
   * {
     @apply border-border;
   }
+
   body {
-    @apply bg-background text-foreground;
+    @apply bg-bg text-text;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 }

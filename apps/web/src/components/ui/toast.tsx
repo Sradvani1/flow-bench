@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
-const TOAST_LIMIT = 5;
-const TOAST_REMOVE_DELAY = 5000;
+const TOAST_LIMIT = 3;
+const TOAST_REMOVE_DELAY = 4000;
 
 type ToastVariant = "default" | "destructive";
 
@@ -28,8 +29,9 @@ function genId() {
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
-function addToRemoveQueue(toastId: string) {
+function addToRemoveQueue(toastId: string, variant?: ToastVariant) {
   if (toastTimeouts.has(toastId)) return;
+  if (variant === "destructive") return;
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId);
     dispatch({ type: "DISMISS_TOAST", toastId });
@@ -57,7 +59,7 @@ function dispatch(action: ToastAction) {
 export function toast(message: string, variant?: ToastVariant) {
   const id = genId();
   dispatch({ type: "ADD_TOAST", toast: { id, message, variant } });
-  addToRemoveQueue(id);
+  addToRemoveQueue(id, variant);
 }
 
 export function useToast() {
@@ -87,14 +89,20 @@ export function Toaster() {
         <div
           key={t.id}
           className={cn(
-            "rounded-lg border px-4 py-3 shadow-lg text-sm cursor-pointer animate-in slide-in-from-right",
+            "rounded-lg border px-4 py-3 shadow-md text-sm flex items-center gap-2 animate-in slide-in-from-right",
             t.variant === "destructive"
-              ? "bg-destructive text-destructive-foreground border-destructive"
-              : "bg-background text-foreground border-border"
+              ? "bg-error text-white border-error"
+              : "bg-surface-2 text-text border-border"
           )}
-          onClick={() => dismiss(t.id)}
         >
-          {t.message}
+          <span className="flex-1">{t.message}</span>
+          <button
+            onClick={() => dismiss(t.id)}
+            className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+            aria-label="Dismiss notification"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
         </div>
       ))}
     </div>

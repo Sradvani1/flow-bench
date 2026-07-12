@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectState } from "@/hooks/use-project-state";
 import { SettingsScreen } from "@/components/settings-screen";
+import { formatRelative } from "@/lib/utils";
 
 export function ProjectHeader() {
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -16,50 +17,48 @@ export function ProjectHeader() {
   const isNoProject = data?.status === "no_project" || data?.status === "error";
 
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 border-b bg-background h-12">
+    <header className="sticky top-0 z-20 h-14 bg-surface shadow-sm flex items-center justify-between px-4 shrink-0">
       <div className="flex items-center gap-3 min-w-0">
         {isLoading ? (
           <>
             <Skeleton className="h-5 w-32" />
-            <Skeleton className="h-5 w-24" />
+            <Skeleton className="h-5 w-20" />
           </>
         ) : isNoProject ? (
-          <span className="text-sm text-muted-foreground">No project</span>
+          <span className="font-display text-lg text-text">FlowBench</span>
         ) : (
           <>
-            <span className="font-semibold text-sm truncate">
+            <h1 className="font-display text-lg text-text truncate max-w-[240px]">
               {data?.project_display_name ?? "FlowBench"}
+            </h1>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                data?.mode === "existing_app"
+                  ? "bg-surface-inset text-text-muted"
+                  : "bg-primary-muted text-primary"
+              }`}
+            >
+              {data?.mode === "existing_app" ? "Existing App" : "New Build"}
             </span>
-            <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
-              {data?.project_state_label ?? data?.project_state ?? ""}
-            </span>
-            {data?.current_phase_state_label && (
-              <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground">
-                {data.current_phase_state_label}
-              </span>
-            )}
-            {data?.mode === "existing_app" && (
-              <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-0.5 rounded">
-                Existing App
-              </span>
-            )}
-            {data?.current_phase_id && (
-              <span className="text-xs text-muted-foreground">
-                Phase {data.current_phase_id}
-              </span>
-            )}
-            {data?.total_phases != null && data?.total_phases > 0 && (
-              <span className="text-xs text-muted-foreground">
-                {data.phases_complete ?? 0}/{data.total_phases} phases
+            {(data?.project_state_label || data?.current_phase_state_label) && (
+              <span className="text-sm text-text-muted hidden sm:inline">
+                {data?.project_state_label ?? data?.current_phase_state_label}
               </span>
             )}
           </>
         )}
       </div>
+
       <div className="flex items-center gap-2">
+        {data?.updated_at && (
+          <span className="text-xs text-text-faint hidden sm:block" title={new Date(data.updated_at).toLocaleString()}>
+            Updated {formatRelative(data.updated_at)}
+          </span>
+        )}
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8"
           onClick={() => setSettingsOpen(true)}
           aria-label="Open settings"
         >
@@ -68,6 +67,7 @@ export function ProjectHeader() {
         <Button
           variant="ghost"
           size="icon"
+          className="h-8 w-8"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label="Toggle dark mode"
         >
@@ -75,6 +75,7 @@ export function ProjectHeader() {
           <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         </Button>
       </div>
+
       <SettingsScreen open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   );

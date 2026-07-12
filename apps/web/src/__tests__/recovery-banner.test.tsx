@@ -63,8 +63,8 @@ describe("RecoveryBanner", () => {
   it("shows interrupted banner with inspect button", () => {
     mockActiveRun.mockReturnValue({ activeRun: makeInterruptedRun().active, isLoading: false });
     render(<RecoveryBanner />);
-    expect(screen.getByText("An action was interrupted")).toBeInTheDocument();
-    expect(screen.getByText("Inspect current state")).toBeInTheDocument();
+    expect(screen.getByText("Work may have stopped unexpectedly. What do you want to do?")).toBeInTheDocument();
+    expect(screen.getByText("Inspect")).toBeInTheDocument();
   });
 
   it("shows retry button dispatches postAction('retry')", async () => {
@@ -82,23 +82,23 @@ describe("RecoveryBanner", () => {
     render(<RecoveryBanner />);
     fireEvent.click(screen.getByText("Continue"));
     expect(mockPostAction).not.toHaveBeenCalled();
-    expect(screen.queryByText("An action was interrupted")).not.toBeInTheDocument();
+    expect(screen.queryByText("Work may have stopped unexpectedly. What do you want to do?")).not.toBeInTheDocument();
   });
 
   it("shows revise-the-plan button dispatches postAction", async () => {
     mockActiveRun.mockReturnValue({ activeRun: makeInterruptedRun().active, isLoading: false });
     mockPostAction.mockResolvedValue({ status: "ok", message: "Revised" });
     render(<RecoveryBanner />);
-    fireEvent.click(screen.getByText("Revise the plan"));
+    fireEvent.click(screen.getByText("Revise Plan"));
     await waitFor(() => {
       expect(mockPostAction).toHaveBeenCalled();
     });
   });
 
-  it("inspect state button opens artifact panel view (no API call)", () => {
+  it("inspect button shows toast (no API call)", () => {
     mockActiveRun.mockReturnValue({ activeRun: makeInterruptedRun().active, isLoading: false });
     render(<RecoveryBanner />);
-    fireEvent.click(screen.getByText("Inspect current state"));
+    fireEvent.click(screen.getByText("Inspect"));
     expect(mockPostAction).not.toHaveBeenCalled();
     expect(mockToast).toHaveBeenCalled();
   });
@@ -107,7 +107,7 @@ describe("RecoveryBanner", () => {
     mockActiveRun.mockReturnValue({ activeRun: makeInterruptedRun().active, isLoading: false });
     mockPostAction.mockResolvedValue({ status: "ok", message: "Revised" });
     render(<RecoveryBanner />);
-    fireEvent.click(screen.getByText("Revise the plan"));
+    fireEvent.click(screen.getByText("Revise Plan"));
     await waitFor(() => {
       expect(mockPostAction).toHaveBeenCalled();
     });

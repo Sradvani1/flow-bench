@@ -7,6 +7,7 @@ import { useActiveRun } from "@/hooks/use-active-run";
 import { useProjectState } from "@/hooks/use-project-state";
 import { postAction } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
+import { X } from "lucide-react";
 
 export function RecoveryBanner() {
   const { activeRun, isLoading } = useActiveRun();
@@ -37,8 +38,6 @@ export function RecoveryBanner() {
   };
 
   const handleInspect = () => {
-    const panel = document.querySelector("[data-artifact-panel]");
-    panel?.scrollIntoView({ behavior: "smooth" });
     toast("Inspect: see the artifact panel and event log for details.");
   };
 
@@ -58,49 +57,53 @@ export function RecoveryBanner() {
   };
 
   return (
-    <div className="bg-amber-50 dark:bg-amber-950 border-b border-amber-200 dark:border-amber-800 px-4 py-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-            An action was interrupted
-          </span>
-          <span className="text-xs text-amber-700 dark:text-amber-400">
-            ({activeRun.action})
+    <div
+      role="alert"
+      className="bg-warning-muted border-b border-warning px-4 py-2.5"
+    >
+      <div className="flex items-center justify-between gap-4 max-w-screen-2xl mx-auto">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-sm text-warning">⚠</span>
+          <span className="text-sm text-text font-medium">
+            Work may have stopped unexpectedly. What do you want to do?
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7"
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-surface-2 text-text border border-border hover:bg-surface-inset transition-colors"
             onClick={handleInspect}
+            title="View the current state and event log"
           >
-            Inspect current state
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            className="text-xs h-7"
+            Inspect
+          </button>
+          <button
+            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-surface-2 text-text border border-border hover:bg-surface-inset transition-colors"
             onClick={handleRetry}
+            title="Retry the last action"
           >
             Retry
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7"
+          </button>
+          <button
+            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-surface-2 text-text border border-border hover:bg-surface-inset transition-colors"
             onClick={handleContinue}
+            title="Dismiss and continue from current state"
           >
             Continue
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-xs h-7"
+          </button>
+          <button
+            className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-surface-2 text-text border border-border hover:bg-surface-inset transition-colors"
             onClick={handleRevisePlan}
+            title="Create a new plan from the current state"
           >
-            Revise the plan
-          </Button>
+            Revise Plan
+          </button>
+          <button
+            onClick={() => setDismissed(true)}
+            className="ml-1 p-1 rounded hover:bg-surface-inset transition-colors"
+            aria-label="Dismiss recovery banner"
+          >
+            <X className="h-3.5 w-3.5 text-text-muted" />
+          </button>
         </div>
       </div>
     </div>

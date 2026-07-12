@@ -1,94 +1,61 @@
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
-const STATUS_CONFIG: Record<
-  string,
-  { variant: "default" | "secondary" | "destructive" | "outline"; label: string; className?: string }
-> = {
-  in_progress: { variant: "default", label: "In Progress" },
-  complete: { variant: "default", label: "Completed", className: "bg-green-100 text-green-800 hover:bg-green-100" },
-  upcoming: { variant: "secondary", label: "Pending" },
-  blocked: { variant: "destructive", label: "Blocked" },
-  skipped: { variant: "outline", label: "Skipped", className: "bg-amber-100 text-amber-800 hover:bg-amber-100" },
+const STATUS_CONFIG: Record<string, { dot: string; label: string }> = {
+  complete: { dot: "bg-success", label: "Complete ✓" },
+  in_progress: { dot: "bg-info", label: "In Progress →" },
+  upcoming: { dot: "bg-text-faint", label: "Pending" },
+  blocked: { dot: "bg-error", label: "Blocked" },
+  skipped: { dot: "bg-text-faint", label: "Skipped" },
+  fixing: { dot: "bg-warning", label: "Fixing" },
 };
 
-export function PhaseQueueCard({
-  data,
-}: {
-  data: Record<string, unknown>;
-}) {
+export function PhaseQueueCard({ data }: { data: Record<string, unknown> }) {
   if (!data) return null;
-  const phases = (data.phases as Array<{
-    id: string;
-    name: string;
-    status: string;
-    description: string;
-  }>) ?? [];
+  const phases = (data.phases as Array<{ id: string; name: string; status: string; description: string }>) ?? [];
   const currentId = String(data.current_phase_id ?? "");
-  const totalProgress = String(data.total_progress ?? "");
-
-  const completeCount = phases.filter(
-    (p) => p.status === "complete",
-  ).length;
+  const completeCount = phases.filter((p) => p.status === "complete").length;
   const totalCount = phases.length;
 
   if (phases.length === 0) return null;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Phase Queue</CardTitle>
-        {totalProgress && (
-          <p className="text-xs text-muted-foreground">{totalProgress}</p>
-        )}
-        {!totalProgress && totalCount > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {completeCount} of {totalCount} phases complete
-          </p>
-        )}
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm">
+    <div className="bg-surface-2 shadow-sm rounded-xl p-6 max-w-[720px] mx-auto">
+      <span className="inline-flex items-center rounded-full bg-surface-inset px-2.5 py-0.5 text-xs font-medium text-text-muted mb-4">
+        Phase Queue
+      </span>
+      <h2 className="font-display text-xl text-text mb-1">Phase Queue</h2>
+      <p className="text-xs text-text-faint mb-4">
+        Phase {completeCount} of {totalCount} complete
+      </p>
+      <div className="h-px bg-divider mb-4" />
+
+      <div className="space-y-1 max-w-[65ch]">
         {phases.map((phase, i) => {
           const isCurrent = phase.id === currentId;
-          const config = STATUS_CONFIG[phase.status] ?? {
-            variant: "secondary" as const,
-            label: phase.status,
-          };
+          const config = STATUS_CONFIG[phase.status] ?? { dot: "bg-text-faint", label: phase.status };
           return (
             <div key={phase.id}>
-              {i > 0 && <Separator className="my-2" />}
+              {i > 0 && <Separator className="my-1 bg-divider" />}
               <div
-                className={`rounded-lg p-3 ${
-                  isCurrent
-                    ? "border-2 border-primary bg-primary/5"
-                    : "border border-transparent"
-                }`}
+                className={`rounded-lg p-3 transition-colors ${
+                  isCurrent ? "bg-primary-muted" : "hover:bg-surface-inset"
+                } ${phase.status === "complete" ? "text-text-faint" : "text-text"}`}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm">{phase.name}</span>
-                  <Badge
-                    variant={config.variant}
-                    className={`text-[10px] px-1.5 py-0 ${config.className ?? ""}`}
-                  >
+                <div className="flex items-center gap-3">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${config.dot}`} />
+                  <span className="flex-1 text-sm font-medium truncate">{phase.name}</span>
+                  <span className={`text-[11px] shrink-0 ${phase.status === "complete" ? "text-text-faint" : "text-text-muted"}`}>
                     {config.label}
-                  </Badge>
+                  </span>
                 </div>
-                {phase.description && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {phase.description}
-                  </p>
+                {isCurrent && phase.description && (
+                  <p className="text-xs text-text-muted mt-2 ml-6 leading-relaxed">{phase.description}</p>
                 )}
               </div>
             </div>
           );
         })}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

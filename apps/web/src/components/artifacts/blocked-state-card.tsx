@@ -1,8 +1,5 @@
 "use client";
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProjectState } from "@/hooks/use-project-state";
 import { useActiveRun } from "@/hooks/use-active-run";
@@ -10,6 +7,7 @@ import { useActions } from "@/hooks/use-actions";
 import { useEvents } from "@/hooks/use-events";
 import { postAction, type ActionEntry } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
+import { AlertTriangle } from "lucide-react";
 
 export function BlockedStateCard() {
   const { data: state } = useProjectState();
@@ -24,9 +22,6 @@ export function BlockedStateCard() {
     state?.current_phase_state === "phase_blocked";
 
   if (!isBlocked) return null;
-
-  const isProjectBlocked = state?.project_state === "project_blocked";
-  const label = isProjectBlocked ? "Project Blocked" : "Phase Blocked";
 
   const lastEvent = events.length > 0 ? events[events.length - 1] : null;
   const whatHappened = activeRun?.failure_message
@@ -54,39 +49,42 @@ export function BlockedStateCard() {
   );
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <Badge variant="destructive" className="text-xs">{label}</Badge>
-        </div>
-        <CardTitle className="text-lg mt-2">
-          {state?.project_state_label ?? label}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm text-muted-foreground">
-        <div>
-          <h4 className="font-semibold text-foreground mb-1">What happened</h4>
-          <p>{whatHappened}</p>
-        </div>
+    <div className="bg-surface-2 shadow-sm rounded-xl p-6 max-w-[720px] mx-auto">
+      <span className="inline-flex items-center rounded-full bg-error text-white px-3 py-0.5 text-xs font-medium mb-4">
+        <AlertTriangle className="h-3 w-3 mr-1" />
+        Blocked
+      </span>
+      <h2 className="font-display text-xl text-text mb-4">
+        {state?.project_state_label ?? "Blocked"}
+      </h2>
+      <div className="h-px bg-divider mb-4" />
+
+      <div className="space-y-6 max-w-[65ch]">
+        <section>
+          <h3 className="font-body font-bold text-base text-text mb-2">What happened</h3>
+          <p className="text-sm text-text-muted leading-relaxed">{whatHappened}</p>
+        </section>
+
         {recoveryActions.length > 0 && (
-          <div>
-            <h4 className="font-semibold text-foreground mb-1">Recovery actions</h4>
-            <div className="flex flex-wrap gap-2">
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-3">What you can do</h3>
+            <div className="space-y-2">
               {recoveryActions.map((a) => (
-                <Button
+                <button
                   key={a.action}
-                  variant="outline"
-                  size="sm"
-                  className="text-xs"
                   onClick={() => handleAction(a)}
+                  className="w-full text-left rounded-lg border border-border hover:border-primary/40 hover:bg-surface-inset transition-colors px-4 py-3"
                 >
-                  {a.label}
-                </Button>
+                  <span className="block text-sm font-medium text-text">{a.label}</span>
+                  {a.description && (
+                    <span className="block text-xs text-text-muted mt-0.5">{a.description}</span>
+                  )}
+                </button>
               ))}
             </div>
-          </div>
+          </section>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

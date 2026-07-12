@@ -1,5 +1,3 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelative } from "@/lib/utils";
 
 export function MasterPlanCard({ data }: { data: Record<string, unknown> }) {
@@ -9,46 +7,57 @@ export function MasterPlanCard({ data }: { data: Record<string, unknown> }) {
   const totalPhases = Number(data.total_phases ?? 0);
   const phases = (data.phases as Array<{ name: string; description: string }>) ?? [];
   const decisions = (data.architecture_decisions as string[]) ?? [];
+
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-lg">{project}</CardTitle>
-          <Badge variant="secondary">{totalPhases || phases.length} phases</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4 text-sm">
+    <div className="bg-surface-2 shadow-sm rounded-xl p-6 max-w-[720px] mx-auto">
+      <span className="inline-flex items-center rounded-full bg-surface-inset px-2.5 py-0.5 text-xs font-medium text-text-muted mb-4">
+        Master Plan
+      </span>
+      <h2 className="font-display text-xl text-text mb-4">{project || "Project Master Plan"}</h2>
+      <div className="h-px bg-divider mb-4" />
+
+      <div className="space-y-6 max-w-[65ch]">
         {phases.length > 0 && (
-          <div>
-            <h4 className="font-semibold mb-2">Phases</h4>
-            <ol className="list-decimal list-inside space-y-2">
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-3">
+              Phases ({totalPhases || phases.length})
+            </h3>
+            <ol className="space-y-3">
               {phases.map((p, i) => (
-                <li key={i}>
-                  <span className="font-medium">{p.name}</span>
-                  {p.description && (
-                    <p className="text-muted-foreground ml-5">{p.description}</p>
-                  )}
+                <li key={i} className="flex gap-3">
+                  <span className="font-mono text-sm text-text-faint shrink-0 w-6 text-right">
+                    {i + 1}.
+                  </span>
+                  <div>
+                    <span className="font-medium text-sm text-text">{p.name}</span>
+                    {p.description && (
+                      <p className="text-sm text-text-muted mt-0.5">{p.description}</p>
+                    )}
+                  </div>
                 </li>
               ))}
             </ol>
-          </div>
+          </section>
         )}
+
         {decisions.length > 0 && (
-          <div>
-            <h4 className="font-semibold mb-2">Architecture Decisions</h4>
-            <ul className="list-disc list-inside space-y-1">
+          <section>
+            <h3 className="font-body font-bold text-base text-text mb-3">Architecture Decisions</h3>
+            <ul className="space-y-2">
               {decisions.map((d, i) => (
-                <li key={i}>{d}</li>
+                <li key={i} className="flex gap-2 text-sm text-text-muted">
+                  <span className="font-mono text-text-faint shrink-0">•</span>
+                  <span>{d}</span>
+                </li>
               ))}
             </ul>
-          </div>
+          </section>
         )}
-        {generatedAt && (
-          <p className="text-xs text-muted-foreground">
-            Generated {formatRelative(generatedAt)}
-          </p>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+
+      {generatedAt && (
+        <p className="text-xs text-text-faint mt-6">Generated {formatRelative(generatedAt)}</p>
+      )}
+    </div>
   );
 }

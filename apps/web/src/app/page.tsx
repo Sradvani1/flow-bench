@@ -1,23 +1,28 @@
 "use client";
 
-import { ProjectHeader } from "@/components/project-header";
-import { PhaseQueue } from "@/components/phase-queue";
-import { ArtifactPanel } from "@/components/artifact-panel";
-import { CommandPane } from "@/components/command-pane";
-import { ProjectTimeline } from "@/components/project-timeline";
-import { RecoveryBanner } from "@/components/recovery-banner";
+import { AppShell } from "@/components/app-shell";
+import { WelcomeScreen } from "@/components/welcome-screen";
+import { useProjectState } from "@/hooks/use-project-state";
 
 export default function Home() {
-  return (
-    <main className="flex flex-col h-screen min-w-[1280px]">
-      <RecoveryBanner />
-      <ProjectHeader />
-      <div className="flex flex-1 overflow-hidden">
-        <PhaseQueue className="w-[220px] min-w-[220px] border-r shrink-0" />
-        <ArtifactPanel className="flex-1 min-w-0" />
-        <CommandPane className="w-[280px] min-w-[280px] border-l shrink-0" />
+  const { data: state, isLoading } = useProjectState();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-bg">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <p className="text-sm text-text-muted font-body">Loading...</p>
+        </div>
       </div>
-      <ProjectTimeline />
-    </main>
-  );
+    );
+  }
+
+  const isNoProject = state?.status === "no_project" || state?.status === "error";
+
+  if (isNoProject) {
+    return <WelcomeScreen />;
+  }
+
+  return <AppShell />;
 }

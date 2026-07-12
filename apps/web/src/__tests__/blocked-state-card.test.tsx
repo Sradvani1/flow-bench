@@ -84,12 +84,12 @@ describe("BlockedStateCard", () => {
     mockPostAction.mockResolvedValue({ status: "ok", message: "Done." });
   });
 
-  it("renders blocked state badge for phase_blocked", () => {
+  it("renders blocked state for phase_blocked", () => {
     mockState.mockReturnValue(makeState());
     mockActions.mockReturnValue(makeActions());
     mockEvents.mockReturnValue(makeEvents());
     render(<BlockedStateCard />);
-    expect(screen.getAllByText("Phase Blocked").length).toBe(2);
+    expect(screen.getByText("Blocked")).toBeInTheDocument();
   });
 
   it("renders blocked state badge for project_blocked", () => {
@@ -109,7 +109,7 @@ describe("BlockedStateCard", () => {
     expect(screen.getByText("Revise Phase")).toBeInTheDocument();
   });
 
-  it("shows last event in 'What happened' section", () => {
+  it("shows last event in what-happened section", () => {
     mockState.mockReturnValue(makeState());
     mockActions.mockReturnValue(makeActions());
     mockEvents.mockReturnValue(makeEvents(["Build crashed"]));

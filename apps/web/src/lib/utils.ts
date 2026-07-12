@@ -17,3 +17,7 @@ export function formatRelative(iso: string): string {
   if (minutes > 0) return rtf.format(-minutes, "minute");
   return rtf.format(-seconds, "second");
 }
+
+export function formatAbsoluteTime(iso: string): string {
+  return new Date(iso).toLocaleString();
+}

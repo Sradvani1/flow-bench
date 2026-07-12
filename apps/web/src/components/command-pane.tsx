@@ -8,48 +8,32 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 
 import { useActions } from "@/hooks/use-actions";
 import { useProjectState } from "@/hooks/use-project-state";
+import { useActiveRun } from "@/hooks/use-active-run";
 import { postAction, type ActionEntry } from "@/lib/api";
 import { useToast } from "@/components/ui/toast";
-import { RiskConfirmationDialog } from "./risk-confirmation-dialog";
+import { ApprovalDialog } from "./approval-dialog";
+import { Loader2, AlertTriangle } from "lucide-react";
 
-interface CommandPaneProps {
-  className?: string;
-}
-
-export function CommandPane({ className = "" }: CommandPaneProps) {
+export function CommandPane() {
   const { data: stateData, isLoading: stateLoading } = useProjectState();
   const { data: actions, isLoading: actionsLoading } = useActions();
+  const { activeRun } = useActiveRun();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [scopeText, setScopeText] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [pending, setPending] = useState(false);
   const [riskAction, setRiskAction] = useState<ActionEntry | null>(null);
   const [riskOpen, setRiskOpen] = useState(false);
-  const [mode, setMode] = useState<"new_build" | "existing_app">("new_build");
-  const [loadingExisting, setLoadingExisting] = useState(false);
-
-  const isNoProject =
-    stateData?.status === "no_project" || stateData?.status === "error";
 
   const reloadAll = () => {
     queryClient.invalidateQueries({ queryKey: ["project-state"] });
     queryClient.invalidateQueries({ queryKey: ["actions"] });
+    queryClient.invalidateQueries({ queryKey: ["active-run"] });
   };
 
   const handleAction = async (entry: ActionEntry) => {
+    if (!entry.enabled) return;
+
     if (entry.action_type === "navigation") {
-      if (entry.action === "view_all_phases") {
-        const queue = document.querySelector("[data-phase-queue]");
-        queue?.scrollIntoView({ behavior: "smooth" });
-      }
-      if (entry.action === "view_summary") {
-        const timeline = document.querySelector("[data-timeline]");
-        timeline?.scrollIntoView({ behavior: "smooth" });
-      }
-      if (entry.action === "view_handoff_notes") {
-        const panel = document.querySelector("[data-artifact-panel]");
-        panel?.scrollIntoView({ behavior: "smooth" });
-      }
       return;
     }
 
@@ -59,57 +43,23 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
       return;
     }
 
-    if (entry.action_type === "adapter") {
-      const res = await postAction(entry.action);
-      toast(res.message);
-      reloadAll();
-      return;
-    }
-
-    const res = await postAction(entry.action);
-    if (res.status === "error") {
-      toast(res.message, "destructive");
-    } else if (res.message) {
-      toast(res.message);
-    }
-    reloadAll();
-  };
-
-  const handleCreateProject = async () => {
-    if (!scopeText.trim()) return;
-    setCreating(true);
-    const res = await postAction("start_new_project", {
-      scope_content: scopeText,
-    });
-    if (res.status === "error") {
-      toast(res.message, "destructive");
-    } else {
-      toast(res.message ?? "Project created");
-    }
-    setCreating(false);
-    reloadAll();
-  };
-
-  const handleLoadExistingApp = async () => {
-    setLoadingExisting(true);
+    setPending(true);
     try {
-      const res = await postAction("load_existing_project");
+      const res = await postAction(entry.action);
       if (res.status === "error") {
         toast(res.message, "destructive");
-      } else {
-        toast(res.message ?? "Project loaded");
+      } else if (res.message) {
+        toast(res.message);
       }
       reloadAll();
-    } catch {
-      toast("An unexpected error occurred.", "destructive");
     } finally {
-      setLoadingExisting(false);
+      setPending(false);
     }
   };
 
   if (stateLoading) {
     return (
-      <div className={`flex flex-col gap-2 p-4 ${className}`}>
+      <div className="flex flex-col gap-2 p-4">
         <Skeleton className="h-4 w-20" />
         <Skeleton className="h-10 w-full" />
         <Skeleton className="h-10 w-full" />
@@ -117,182 +67,111 @@ export function CommandPane({ className = "" }: CommandPaneProps) {
     );
   }
 
-  if (isNoProject) {
-    return (
-      <div className={`flex flex-col p-4 gap-4 ${className}`}>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-          Actions
-        </h3>
-        <div role="radiogroup" aria-label="Project mode"
-             className="flex gap-0 border rounded-lg overflow-hidden">
-          <button role="radio" aria-checked={mode === "new_build"}
-            className={`flex-1 px-3 py-1.5 text-xs font-medium ${
-              mode === "new_build"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-            }`}
-            onClick={() => setMode("new_build")}>
-            New Build
-          </button>
-          <button role="radio" aria-checked={mode === "existing_app"}
-            className={`flex-1 px-3 py-1.5 text-xs font-medium ${
-              mode === "existing_app"
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground"
-            }`}
-            onClick={() => setMode("existing_app")}>
-            Existing App
-          </button>
-        </div>
+  const allActions = (actions ?? []).filter((a) => a.action !== "load_existing_project" && a.action !== "start_new_project");
 
-        {mode === "new_build" ? (
-          <div className="border rounded-lg p-4">
-            <h4 className="font-medium text-sm mb-2">Start new project</h4>
-            <label htmlFor="scope-input" className="sr-only">App idea</label>
-            <textarea id="scope-input"
-              className="w-full h-24 rounded border border-input bg-background p-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="Describe your app idea..."
-              value={scopeText}
-              onChange={(e) => setScopeText(e.target.value)}
-            />
-            <Button className="w-full mt-2" onClick={handleCreateProject}
-              disabled={creating || !scopeText.trim()}>
-              {creating ? "Creating..." : "Create"}
+  const systemActions = allActions.filter((a) => a.action_type === "system" && !a.risk_category);
+  const adapterActions = allActions.filter((a) => a.action_type === "adapter" && !a.risk_category);
+  const riskyActions = allActions.filter((a) => a.risk_category);
+  const navigationActions = allActions.filter((a) => a.action_type === "navigation");
+
+  const primaryAction = allActions.find((a) => a.enabled && !a.risk_category && a.action_type !== "navigation")
+    ?? systemActions[0]
+    ?? null;
+
+  const otherActions = allActions.filter((a) => a !== primaryAction && a.action_type !== "navigation");
+  const otherSorted = [...systemActions.filter((a) => a !== primaryAction), ...adapterActions, ...riskyActions];
+
+  const isRunning = activeRun?.status === "running" || activeRun?.status === "queued";
+
+  return (
+    <nav aria-label="Actions" className="flex flex-col h-full">
+      {/* Section A: Primary action — always visible without scrolling */}
+      <div className="shrink-0 px-3 pt-3 pb-2">
+        {primaryAction && (
+          <div>
+            <Button
+              className="w-full bg-primary text-text-inverse hover:bg-primary-hover text-sm font-medium h-auto py-2.5"
+              onClick={() => handleAction(primaryAction)}
+              disabled={pending || !primaryAction.enabled}
+            >
+              {pending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {primaryAction.label}
             </Button>
-          </div>
-        ) : (
-          <div className="border rounded-lg p-4">
-            <h4 className="font-medium text-sm mb-2">Load existing app</h4>
-            <p className="text-xs text-muted-foreground mb-3">
-              FlowBench will scan the current working directory and
-              produce an audit report for planning.
-            </p>
-            <Button className="w-full" onClick={handleLoadExistingApp}
-              disabled={loadingExisting}>
-              {loadingExisting ? "Auditing..." : "Start Audit"}
-            </Button>
+            {primaryAction.description && (
+              <p className="text-xs text-text-muted mt-1.5 leading-relaxed">
+                {primaryAction.description}
+              </p>
+            )}
           </div>
         )}
       </div>
-    );
-  }
 
-  const systemActions = (actions ?? []).filter(
-    (a) => a.action_type === "system" && !a.risk_category
-  );
-  const riskyActions = (actions ?? []).filter(
-    (a) => a.risk_category
-  );
-  const navigationActions = (actions ?? []).filter(
-    (a) => a.action_type === "navigation"
-  );
-  const adapterActions = (actions ?? []).filter(
-    (a) => a.action_type === "adapter" && !a.risk_category
-  );
+      {/* Section B: Other valid actions (scrollable) */}
+      <ScrollArea className="flex-1 px-3">
+        {otherSorted.length > 0 && (
+          <div className="space-y-1 pb-3">
+            {otherSorted.map((a) => (
+              <button
+                key={a.action}
+                onClick={() => handleAction(a)}
+                disabled={!a.enabled || pending}
+                className={`
+                  w-full text-left rounded-md border px-3 py-2 text-sm transition-colors
+                  ${a.enabled
+                    ? "border-border hover:border-primary/40 hover:bg-surface-2 text-text"
+                    : "border-border opacity-40 cursor-not-allowed"
+                  }
+                `}
+                title={!a.enabled ? a.description : undefined}
+              >
+                <div className="flex items-center gap-2">
+                  {a.risk_category && (
+                    <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                  )}
+                  <span className="font-medium">{a.label}</span>
+                </div>
+                {a.description && (
+                  <p className="text-xs text-text-muted mt-0.5">{a.description}</p>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
 
-  return (
-    <div className={`flex flex-col ${className}`}>
-      <ScrollArea className="flex-1 p-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-          Actions
-        </h3>
+        {!primaryAction && otherSorted.length === 0 && !actionsLoading && (
+          <p className="text-xs text-text-muted text-center py-8">No actions available.</p>
+        )}
 
-        {actionsLoading ? (
+        {actionsLoading && (
           <div className="flex flex-col gap-2">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
-        ) : (
-          <>
-            {systemActions.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-muted-foreground mb-2">Project actions</p>
-                <div className="flex flex-col gap-1.5">
-                  {systemActions.map((a) => (
-                    <Button
-                      key={a.action}
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start text-left h-auto py-2"
-                      onClick={() => handleAction(a)}
-                    >
-                      {a.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {riskyActions.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-muted-foreground mb-2">Risky actions</p>
-                <div className="flex flex-col gap-1.5">
-                  {riskyActions.map((a) => (
-                    <Button
-                      key={a.action}
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start text-left h-auto py-2 border-destructive/30 text-destructive hover:text-destructive"
-                      onClick={() => handleAction(a)}
-                    >
-                      {a.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {navigationActions.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-muted-foreground mb-2">Navigation</p>
-                <div className="flex flex-col gap-1.5">
-                  {navigationActions.map((a) => (
-                    <Button
-                      key={a.action}
-                      variant="ghost"
-                      size="sm"
-                      className="w-full justify-start text-left h-auto py-2"
-                      onClick={() => handleAction(a)}
-                    >
-                      {a.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {adapterActions.length > 0 && (
-              <div className="mb-4">
-                <p className="text-xs text-muted-foreground mb-2">Execution</p>
-                <div className="flex flex-col gap-1.5">
-                  {adapterActions.map((a) => (
-                    <Button
-                      key={a.action}
-                      variant="outline"
-                      size="sm"
-                      className="w-full justify-start text-left h-auto py-2 opacity-50 hover:opacity-70"
-                      onClick={() => handleAction(a)}
-                    >
-                      {a.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {actions?.length === 0 && (
-              <p className="text-xs text-muted-foreground">No actions available.</p>
-            )}
-          </>
         )}
       </ScrollArea>
 
-      <RiskConfirmationDialog
+      {/* Section C: Status block */}
+      <div className="shrink-0 border-t border-divider px-3 py-2.5">
+        {isRunning && activeRun ? (
+          <div className="flex items-center gap-2 text-xs text-info">
+            <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+            <span className="truncate">
+              Building {activeRun.phase_id ? `Phase ${activeRun.phase_id}` : "..."}
+            </span>
+          </div>
+        ) : activeRun?.status === "interrupted" ? (
+          <p className="text-xs text-warning">Last action was interrupted</p>
+        ) : (
+          <p className="text-xs text-text-faint">No active run</p>
+        )}
+      </div>
+
+      <ApprovalDialog
         action={riskAction}
         open={riskOpen}
         onOpenChange={setRiskOpen}
         onComplete={reloadAll}
       />
-    </div>
+    </nav>
   );
 }

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { RiskConfirmationDialog } from "@/components/risk-confirmation-dialog";
+import { ApprovalDialog } from "@/components/approval-dialog";
 import type { ActionEntry } from "@/lib/api";
 
 const mockPostAction = jest.fn();
@@ -31,7 +31,7 @@ function renderDialog(action: ActionEntry | null, open = true) {
   const onComplete = jest.fn();
 
   const result = render(
-    <RiskConfirmationDialog
+    <ApprovalDialog
       action={action}
       open={open}
       onOpenChange={onOpenChange}
@@ -43,16 +43,16 @@ function renderDialog(action: ActionEntry | null, open = true) {
 }
 
 async function getProceedButton() {
-  return screen.findByRole("button", { name: /proceed/i });
+  return screen.findByRole("button", { name: /go ahead/i });
 }
 
 async function getCancelButton() {
-  return screen.findByRole("button", { name: /cancel/i });
+  return screen.findByRole("button", { name: /don't do this/i });
 }
 
 // The dialog renders in a portal; screen queries find elements anywhere in DOM.
 
-describe("RiskConfirmationDialog", () => {
+describe("ApprovalDialog", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPostAction.mockResolvedValue({ status: "ok", message: "Done." });
@@ -60,15 +60,15 @@ describe("RiskConfirmationDialog", () => {
 
   it("renders with action label and risk explanation", () => {
     renderDialog(baseAction);
-    expect(screen.getByText("Cancel project")).toBeInTheDocument();
+    expect(screen.getByText("Confirm: Cancel project")).toBeInTheDocument();
     expect(
       screen.getByText("This will mark the project as cancelled.")
     ).toBeInTheDocument();
   });
 
-  it("renders with fallback explanation", () => {
-    renderDialog({ ...baseAction, risk_explanation: null });
-    expect(screen.getByText("Are you sure you want to proceed?")).toBeInTheDocument();
+  it("renders with risk category badge when present", () => {
+    renderDialog(baseAction);
+    expect(screen.getByText("Destructive")).toBeInTheDocument();
   });
 
   it("cancel closes dialog without API call", async () => {

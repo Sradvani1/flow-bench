@@ -10,8 +10,12 @@ export function useActiveRun() {
     refetchInterval: 5000,
   });
 
+  const active = query.data?.active ?? null;
+  const isRunning = active?.status === "running" || active?.status === "queued";
+
   return {
-    activeRun: query.data?.active ?? null,
+    activeRun: active,
     isLoading: query.isLoading,
+    isRunning,
   };
 }

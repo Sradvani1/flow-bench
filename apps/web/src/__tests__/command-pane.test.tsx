@@ -6,13 +6,23 @@ const mockToast = jest.fn();
 
 jest.mock("@/hooks/use-project-state", () => ({
   useProjectState: () => ({
-    data: { status: "no_project" },
+    data: { status: "scope_ready", project_state_label: "Scope Ready" },
     isLoading: false,
   }),
 }));
 
 jest.mock("@/hooks/use-actions", () => ({
-  useActions: () => ({ data: [], isLoading: false }),
+  useActions: () => ({
+    data: [
+      { action: "generate_master_plan", label: "Generate Master Plan", description: "Create a master plan from scope", action_type: "system", risk_category: null, enabled: true },
+      { action: "edit_scope", label: "Edit Scope", description: "Modify the project scope", action_type: "system", risk_category: "modify_files", risk_explanation: "This will change scope", enabled: true },
+    ],
+    isLoading: false,
+  }),
+}));
+
+jest.mock("@/hooks/use-active-run", () => ({
+  useActiveRun: () => ({ activeRun: null, isLoading: false, isRunning: false }),
 }));
 
 jest.mock("@/lib/api", () => ({
@@ -28,110 +38,37 @@ jest.mock("@/components/ui/toast", () => ({
   Toaster: () => null,
 }));
 
-describe("CommandPane — mode selector", () => {
+describe("CommandPane", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockPostAction.mockResolvedValue({ status: "ok", message: "Done." });
   });
 
-  it("renders radiogroup with aria-label", () => {
+  it("renders primary action button", () => {
     render(<CommandPane />);
-    const group = screen.getByRole("radiogroup");
-    expect(group).toBeInTheDocument();
-    expect(group).toHaveAttribute("aria-label", "Project mode");
+    expect(screen.getByText("Generate Master Plan")).toBeInTheDocument();
   });
 
-  it("defaults to New Build selected with aria-checked", () => {
+  it("renders primary action description", () => {
     render(<CommandPane />);
-    const newBuild = screen.getByRole("radio", { name: "New Build" });
-    const existingApp = screen.getByRole("radio", { name: "Existing App" });
-    expect(newBuild).toHaveAttribute("aria-checked", "true");
-    expect(existingApp).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Create a master plan from scope")).toBeInTheDocument();
   });
 
-  it("toggles aria-checked when switching to Existing App", () => {
+  it("shows status block with no active run", () => {
     render(<CommandPane />);
-    fireEvent.click(screen.getByRole("radio", { name: "Existing App" }));
-    const newBuild = screen.getByRole("radio", { name: "New Build" });
-    const existingApp = screen.getByRole("radio", { name: "Existing App" });
-    expect(newBuild).toHaveAttribute("aria-checked", "false");
-    expect(existingApp).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("No active run")).toBeInTheDocument();
   });
 
-  it("toggles aria-checked back to New Build", () => {
+  it("renders risk-category actions with warning icon", () => {
     render(<CommandPane />);
-    fireEvent.click(screen.getByRole("radio", { name: "Existing App" }));
-    fireEvent.click(screen.getByRole("radio", { name: "New Build" }));
-    const newBuild = screen.getByRole("radio", { name: "New Build" });
-    expect(newBuild).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByText("Edit Scope")).toBeInTheDocument();
   });
 
-  it("renders New Build tab as default with scope textarea", () => {
+  it("dispatches non-risky action on click", async () => {
     render(<CommandPane />);
-    expect(screen.getByText("New Build")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Describe your app idea..."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Create")).toBeInTheDocument();
-  });
-
-  it("switches to Existing App tab on click", () => {
-    render(<CommandPane />);
-    fireEvent.click(screen.getByText("Existing App"));
-    expect(screen.getByText("Start Audit")).toBeInTheDocument();
-    expect(
-      screen.queryByPlaceholderText("Describe your app idea..."),
-    ).not.toBeInTheDocument();
-  });
-
-  it("switches back to New Build tab", () => {
-    render(<CommandPane />);
-    fireEvent.click(screen.getByText("Existing App"));
-    fireEvent.click(screen.getByText("New Build"));
-    expect(
-      screen.getByPlaceholderText("Describe your app idea..."),
-    ).toBeInTheDocument();
-  });
-
-  it("disables Audit button while loading", async () => {
-    mockPostAction.mockImplementation(() => new Promise(() => {}));
-    render(<CommandPane />);
-    fireEvent.click(screen.getByText("Existing App"));
-    fireEvent.click(screen.getByText("Start Audit"));
+    fireEvent.click(screen.getByText("Generate Master Plan"));
     await waitFor(() => {
-      expect(screen.getByText("Auditing...")).toBeDisabled();
-    });
-  });
-
-  it("calls postAction on submit", async () => {
-    mockPostAction.mockResolvedValue({ status: "ok", message: "Loaded" });
-    render(<CommandPane />);
-    fireEvent.click(screen.getByText("Existing App"));
-    fireEvent.click(screen.getByText("Start Audit"));
-    await waitFor(() => {
-      expect(mockPostAction).toHaveBeenCalledWith("load_existing_project");
-    });
-  });
-
-  it("shows error toast on failure", async () => {
-    mockPostAction.mockResolvedValue({
-      status: "error",
-      message: "Audit failed",
-    });
-    render(<CommandPane />);
-    fireEvent.click(screen.getByText("Existing App"));
-    fireEvent.click(screen.getByText("Start Audit"));
-    await waitFor(() => {
-      expect(mockToast).toHaveBeenCalledWith("Audit failed", "destructive");
-    });
-  });
-
-  it("re-enables button after API error", async () => {
-    mockPostAction.mockResolvedValue({ status: "error", message: "fail" });
-    render(<CommandPane />);
-    fireEvent.click(screen.getByText("Existing App"));
-    fireEvent.click(screen.getByText("Start Audit"));
-    await waitFor(() => {
-      expect(screen.getByText("Start Audit")).not.toBeDisabled();
+      expect(mockPostAction).toHaveBeenCalledWith("generate_master_plan");
     });
   });
 });
