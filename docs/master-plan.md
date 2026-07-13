@@ -34,6 +34,15 @@ If any conflict exists between this master plan and the workflow contract, **the
 | **Skip/reorder rules** | Not defined | Explicit: only upcoming phases reordered; skip requires reason; skipped phases can be restored |
 | **Safety constraints** | Not defined | 127.0.0.1 binding, path validation, symlink resolution, artifact boundary, secret scrubbing, HTML escaping |
 | **Adapter execution** | `adapter_not_available` for all adapter actions (Phase 1) | `OpenCodeAdapter` registered in lifespan; full preflight/commit pipeline with context bundles, RunRecord metadata, structured output protocol, two-phase lifecycle |
+| **Atomic writes** | Not defined | Write temp → fsync → rename; events only after durable write |
+| **Schema versioning** | Not defined | `schema_version` field on every top-level artifact (starts at 1) |
+| **AdopterResult** | Had `proposed_risky_actions` | Removed — risk detection is config-driven, not adapter-driven |
+| **Golden-path tests** | Implicit | 6 explicit tests defined in workflow-contract.json |
+| **Phase 1 adapter scope** | Phase 1 implied full adapter-backed dispatch | Phase 1 returns `adapter_not_available` for all adapter-backed actions; only state-only actions execute; full dispatch pipeline deferred to Phase 3 |
+| **Approval ownership** | Spread across phases 2/3/5 | Phase 2: UI dialog shell (mocked data). Phase 3: backend enforcement gate. Phase 5: policy config, explanations, audit events, tests. Backend is safety authority. |
+| **Recovery semantics** | Vague "retry" and "continue" | Four precise recovery choices defined in workflow-contract.json with exact meaning and safety rules. Retry = new RunRecord with fresh context, never reuse stale state. |
+| **Artifact layout** | Ambiguous `~/.flowbench/projects/{name}/` path | Locked to `<repo>/.flowbench/` flat namespace. No project-name subdirectory. Phase-specific artifacts use `<type>-<phase-id>.json`. Future multi-project requires separate scope decision. |
+| **RunRecord** | `command_context_hash` not defined | Added: sha256 of assembled context bundle. Enables tracing retries while confirming fresh context. Status transition table: terminal states never → running; retry creates new record. |
 
 ---
 
@@ -49,15 +58,6 @@ If any conflict exists between this master plan and the workflow contract, **the
 | 6 | Existing app mode: audit service, context injection | ✅ Complete | `load_existing_project` works end-to-end |
 | 7 | CLI, recovery UI, safety enforcement, golden-path tests, docs | ✅ Complete | `flowbench` CLI, recovery UI, safety, smoke tests |
 | 8 | Auto-dispatch for review/test with fix-cycle support | ✅ Complete | Review → test → handoff auto-dispatch chain |
-| **Atomic writes** | Not defined | Write temp → fsync → rename; events only after durable write |
-| **Schema versioning** | Not defined | `schema_version` field on every top-level artifact (starts at 1) |
-| **AdopterResult** | Had `proposed_risky_actions` | Removed — risk detection is config-driven, not adapter-driven |
-| **Golden-path tests** | Implicit | 6 explicit tests defined in workflow-contract.json |
-| **Phase 1 adapter scope** | Phase 1 implied full adapter-backed dispatch | Phase 1 returns `adapter_not_available` for all adapter-backed actions; only state-only actions execute; full dispatch pipeline deferred to Phase 3 |
-| **Approval ownership** | Spread across phases 2/3/5 | Phase 2: UI dialog shell (mocked data). Phase 3: backend enforcement gate. Phase 5: policy config, explanations, audit events, tests. Backend is safety authority. |
-| **Recovery semantics** | Vague "retry" and "continue" | Four precise recovery choices defined in workflow-contract.json with exact meaning and safety rules. Retry = new RunRecord with fresh context, never reuse stale state. |
-| **Artifact layout** | Ambiguous `~/.flowbench/projects/{name}/` path | Locked to `<repo>/.flowbench/` flat namespace. No project-name subdirectory. Phase-specific artifacts use `<type>-<phase-id>.json`. Future multi-project requires separate scope decision. |
-| **RunRecord** | `command_context_hash` not defined | Added: sha256 of assembled context bundle. Enables tracing retries while confirming fresh context. Status transition table: terminal states never → running; retry creates new record. |
 
 ---
 
