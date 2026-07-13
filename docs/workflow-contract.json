@@ -960,8 +960,8 @@
       },
       {
         "adapter_action": "build_phase",
-        "required_context": ["phase_plan", "phase_handoff"],
-        "optional_context": ["master_plan_excerpt"],
+        "required_context": ["phase_plan"],
+        "optional_context": ["phase_handoff", "master_plan_excerpt"],
         "assembly_note": "Approved phase plan + any prior handoff for context stability. Master plan excerpt included if relevant."
       },
       {

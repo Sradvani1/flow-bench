@@ -16,7 +16,11 @@ from services.orchestrator.engine.state_machine import StateTransitionError
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from services.orchestrator.adapters.opencode import OpenCodeAdapter
+    from services.orchestrator.services.action_service import set_default_adapter
     from services.orchestrator.store.run_store import RunStore
+
+    set_default_adapter(OpenCodeAdapter())
     store = RunStore(".")
     store.interrupt_running_runs()
     yield

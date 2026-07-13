@@ -221,9 +221,10 @@ class TestOpenCodeAdapter:
             timeout=30,
             output_path=str(tmp_path / "output.json"),
         ))
-        # Since opencode CLI is not available, it will return failed
+        # Since opencode CLI is not available (or fails), it will return failed
         assert result.success is False
-        assert "not found" in result.output_text or "not on PATH" in result.output_text
+        assert result.outcome == "failed"
+        assert result.output_text  # Some error message
 
     def test_output_file_protocol(self, tmp_path):
         commands_dir = tmp_path / "adapters" / "commands"

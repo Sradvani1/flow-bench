@@ -204,10 +204,40 @@ def status():
 
 
 @main.command()
+@click.option(
+    "--url", default="http://127.0.0.1:8000/health", show_default=True, help="Health endpoint URL."
+)
+def health(url: str):
+    """Check whether the backend API is reachable."""
+    try:
+        req = Request(url, method="GET")
+        with urlopen(req, timeout=3) as resp:
+            if resp.status != 200:
+                click.echo(
+                    f"ERROR: /health returned HTTP {resp.status}", err=True
+                )
+                sys.exit(1)
+            try:
+                body = json.loads(resp.read())
+            except json.JSONDecodeError as exc:
+                click.echo(f"ERROR: /health returned invalid JSON: {exc}", err=True)
+                sys.exit(1)
+    except (URLError, OSError) as exc:
+        click.echo(f"ERROR: Could not reach {url}: {exc}", err=True)
+        sys.exit(1)
+
+    status = body.get("status", "unknown")
+    version = body.get("version", "unknown")
+    click.echo(f"status: {status}")
+    click.echo(f"version: {version}")
+
+
+@main.command()
 def help_cmd():
     """Show available commands."""
-    click.echo("flowbench start — Start the FlowBench service")
+    click.echo("flowbench start  — Start the FlowBench service")
     click.echo("flowbench status — Show current project state")
+    click.echo("flowbench health — Check whether the backend API is reachable")
 
 
 if __name__ == "__main__":

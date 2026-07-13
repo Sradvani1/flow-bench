@@ -7,7 +7,8 @@
 **Backend suite**: 237 / 237 passing (unchanged)  
 **Frontend tests**: 61 / 61 passing (was 35 — 26 new tests added)  
 **Frontend build**: clean  
-**Lint**: N/A (no backend changes)
+**Lint**: N/A (no backend changes)  
+**Commit**: dc6fe92
 
 ---
 

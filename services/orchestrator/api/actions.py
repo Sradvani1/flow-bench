@@ -66,10 +66,11 @@ async def get_actions():
     store = FileStore(".")
     state_data = store.read_json("current-state.json")
     if state_data is None:
-        return []
-
-    current_state = state_data.get("project_state")
-    phase_state = state_data.get("current_phase_state")
+        current_state = "starting"
+        phase_state = None
+    else:
+        current_state = state_data.get("project_state")
+        phase_state = state_data.get("current_phase_state")
 
     available = []
     machine = create_phase_machine(config) if phase_state else create_project_machine(config)
@@ -136,6 +137,18 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         ).model_dump()
 
     if action == "load_existing_project" and state_data is None:
+        # Check adapter availability BEFORE writing boot state
+        from services.orchestrator.services.action_service import get_default_adapter
+        if get_default_adapter() is None:
+            return {
+                "status": "adapter_not_available",
+                "message": (
+                    "No execution backend is configured. Adapter-backed actions "
+                    "require a configured backend (e.g., OpenCode)."
+                ),
+                "action": action,
+                "state_unchanged": True,
+            }
         repo_path = str(Path.cwd().resolve())
         boot_state = CurrentState(
             project_display_name="My Project",
@@ -155,6 +168,10 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
     current_state_obj = CurrentState(**state_data) if state_data else None
     current_project_state = current_state_obj.project_state if current_state_obj else None
     current_phase_state = current_state_obj.current_phase_state if current_state_obj else None
+
+    # Create ActionService once for reuse in adapter actions and auto-dispatch
+    from services.orchestrator.services.action_service import ActionService
+    action_service = ActionService(".")
 
     # Confirmation gate for all actions (system and adapter)
     risk_category = action_entry.get("risk_category")
@@ -224,10 +241,8 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
         })
 
     if action_type == "adapter":
-        from services.orchestrator.services.action_service import ActionService
-        service = ActionService(".")
         body_dict = body.model_dump() if body else None
-        return await service.dispatch_adapter_action(
+        return await action_service.dispatch_adapter_action(
             action, body_dict, config, actions_config
         )
 
@@ -313,6 +328,24 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
             updated_at=datetime.now(timezone.utc),
         )
         store.write_json("scope.json", json.loads(scope.model_dump_json()))
+
+    if action == "accept_master_plan":
+        master_plan = store.read_json("master-plan.json")
+        if master_plan and master_plan.get("phases"):
+            phase_queue = {
+                "schema_version": 1,
+                "phases": [
+                    {
+                        "phase_id": p.get("phase_id") or p.get("id"),
+                        "phase_name": p.get("phase_name") or p.get("title"),
+                        "summary": p.get("summary") or p.get("description", ""),
+                        "status": "upcoming",
+                    }
+                    for p in master_plan["phases"]
+                ],
+            }
+            store.write_json("phase-queue.json", phase_queue)
+            current_state_obj.total_phases = len(phase_queue["phases"])
 
     if action == "start_next_phase":
         phase_queue_data = store.read_json("phase-queue.json") or {}
@@ -415,11 +448,9 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
 
     # Auto-dispatch on phase state entry (system actions only)
     if level == "phase" and current_phase_state != current_state_obj.current_phase_state:
-        from services.orchestrator.services.action_service import ActionService
-        service = ActionService(".")
         prior = CurrentState(**current_state_obj.model_dump())
         prior.current_phase_state = current_phase_state
-        auto_result = await service._check_auto_dispatch(
+        auto_result = await action_service._check_auto_dispatch(
             prior, current_state_obj, config, actions_config
         )
         if auto_result:

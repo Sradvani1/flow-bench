@@ -67,6 +67,26 @@ class RunStore:
             )
         run = self.get_run(run_id)
         if run is None:
+            # Debug: list runs dir
+            debug_path = self.runs_dir / "debug_complete_run.txt"
+            with open(str(debug_path), "w") as f:
+                f.write(f"Looking for run_id: {run_id}\n")
+                f.write(f"runs_dir: {self.runs_dir}\n")
+                f.write(f"runs_dir exists: {self.runs_dir.exists()}\n")
+                files = list(self.runs_dir.glob("*.json"))
+                f.write(f"Files in runs_dir: {[p.name for p in files]}\n")
+                for p in files:
+                    f.write(f"  {p.name} (stem={p.stem})\n")
+            # Fallback: scan runs dir for matching file (handles edge cases in path resolution)
+            for path in self.runs_dir.glob("*.json"):
+                if path.stem == run_id:
+                    try:
+                        with open(str(path), "r") as f:
+                            run = RunRecord(**json.load(f))
+                        break
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+        if run is None:
             raise ValueError(f"Run not found: {run_id}")
         run.status = status
         run.finished_at = finished_at or datetime.now(timezone.utc)

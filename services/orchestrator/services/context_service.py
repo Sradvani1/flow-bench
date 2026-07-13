@@ -114,7 +114,7 @@ class ContextService:
         if key == "phase_handoff":
             if phase_id:
                 return self._json_artifact(f"handoff-{phase_id}.json")
-            return None
+            return "This is the first phase - no prior handoff available."
         if key in ("build_summary", "latest_build_summary"):
             if phase_id:
                 return self._json_artifact(f"build-summary-{phase_id}.json")

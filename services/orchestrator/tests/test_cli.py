@@ -1,12 +1,18 @@
+import json
 import os
 import signal
 import socket
 import subprocess
 import sys
 import time
+import unittest.mock
 from pathlib import Path
+from urllib.error import URLError
 
 import pytest
+from click.testing import CliRunner
+
+from services.orchestrator.cli import health
 
 
 def _find_cli() -> str:
@@ -245,3 +251,67 @@ def test_status_no_project():
     )
     assert result.returncode == 0
     assert "No project set up yet" in result.stdout or "No project set up yet" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Unit tests for the `health` command (no live server required)
+# ---------------------------------------------------------------------------
+
+def _make_mock_response(body: bytes, status: int = 200):
+    """Return a mock object that behaves like http.client.HTTPResponse."""
+    mock_resp = unittest.mock.MagicMock()
+    mock_resp.status = status
+    mock_resp.read.return_value = body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = unittest.mock.MagicMock(return_value=False)
+    return mock_resp
+
+
+class TestHealthCommand:
+    """Unit tests for `flowbench health` using mocked urlopen."""
+
+    def test_healthy_response(self):
+        body = json.dumps({"status": "ok", "version": "1.2.3"}).encode()
+        mock_resp = _make_mock_response(body, status=200)
+        runner = CliRunner()
+        with unittest.mock.patch("services.orchestrator.cli.urlopen", return_value=mock_resp):
+            result = runner.invoke(health, ["--url", "http://127.0.0.1:8000/health"])
+        assert result.exit_code == 0
+        assert "status: ok" in result.output
+        assert "version: 1.2.3" in result.output
+
+    def test_missing_fields_show_unknown(self):
+        body = json.dumps({}).encode()
+        mock_resp = _make_mock_response(body, status=200)
+        runner = CliRunner()
+        with unittest.mock.patch("services.orchestrator.cli.urlopen", return_value=mock_resp):
+            result = runner.invoke(health, ["--url", "http://127.0.0.1:8000/health"])
+        assert result.exit_code == 0
+        assert "status: unknown" in result.output
+        assert "version: unknown" in result.output
+
+    def test_non_200_status_exits_1(self):
+        mock_resp = _make_mock_response(b"", status=503)
+        runner = CliRunner()
+        with unittest.mock.patch("services.orchestrator.cli.urlopen", return_value=mock_resp):
+            result = runner.invoke(health, ["--url", "http://127.0.0.1:8000/health"])
+        assert result.exit_code == 1
+        assert "HTTP 503" in result.output
+
+    def test_network_error_exits_1(self):
+        runner = CliRunner()
+        with unittest.mock.patch(
+            "services.orchestrator.cli.urlopen",
+            side_effect=URLError("connection refused"),
+        ):
+            result = runner.invoke(health, ["--url", "http://127.0.0.1:8000/health"])
+        assert result.exit_code == 1
+        assert "Could not reach" in result.output
+
+    def test_malformed_json_exits_1(self):
+        mock_resp = _make_mock_response(b"not-json", status=200)
+        runner = CliRunner()
+        with unittest.mock.patch("services.orchestrator.cli.urlopen", return_value=mock_resp):
+            result = runner.invoke(health, ["--url", "http://127.0.0.1:8000/health"])
+        assert result.exit_code == 1
+        assert "invalid JSON" in result.output

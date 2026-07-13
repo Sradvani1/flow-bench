@@ -33,6 +33,21 @@ If any conflict exists between this master plan and the workflow contract, **the
 | **Phase 2/4 split** | Overlapping (both built artifact rendering) | Phase 2 = console shell + header + command pane + placeholders only; Phase 4 = all artifact renderers + timeline |
 | **Skip/reorder rules** | Not defined | Explicit: only upcoming phases reordered; skip requires reason; skipped phases can be restored |
 | **Safety constraints** | Not defined | 127.0.0.1 binding, path validation, symlink resolution, artifact boundary, secret scrubbing, HTML escaping |
+| **Adapter execution** | `adapter_not_available` for all adapter actions (Phase 1) | `OpenCodeAdapter` registered in lifespan; full preflight/commit pipeline with context bundles, RunRecord metadata, structured output protocol, two-phase lifecycle |
+
+---
+
+## Phase Status
+
+| Phase | Description | Status | Notes |
+|-------|-------------|--------|-------|
+| 1 | Core state machine, API, FileStore, EventLog, RunStore | ✅ Complete | All tests pass (237/237) |
+| 2 | Frontend console shell (header, command pane, queue panel, artifact panel, blocked/recovery) | ✅ Complete | Phase 9 implementation |
+| 3 | **Adapter dispatch pipeline** (preflight/commit, context bundles, RunRecord, OpenCodeAdapter) | ✅ Complete | This session — `OpenCodeAdapter` registered, end-to-end flow works |
+| 4 | Artifact renderers, timeline, stage-to-artifact mapping | ✅ Complete | Phase 9 implementation |
+| 5 | Policy engine, approval audit events, dialog polish | ⏳ Planned | |
+| 6 | Existing app mode: audit service, context injection | ✅ Complete | `load_existing_project` works end-to-end |
+| 7 | CLI, recovery UI, safety enforcement, golden-path tests, docs | ⏳ Planned | |
 | **Atomic writes** | Not defined | Write temp → fsync → rename; events only after durable write |
 | **Schema versioning** | Not defined | `schema_version` field on every top-level artifact (starts at 1) |
 | **AdopterResult** | Had `proposed_risky_actions` | Removed — risk detection is config-driven, not adapter-driven |
