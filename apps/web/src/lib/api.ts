@@ -30,6 +30,7 @@ export interface ActionEntry {
 export interface ActionRequestBody {
   scope_content?: string;
   confirmed?: boolean;
+  project_display_name?: string;
 }
 
 export interface ActionResponse {
@@ -133,7 +134,7 @@ export async function fetchActiveRun(): Promise<{ active: RunRecord | null }> {
   }
 }
 
-export async function fetchHealth(): Promise<{ status: string; version: string } | null> {
+export async function fetchHealth(): Promise<{ status: string; version: string; adapter?: { name: string; available: boolean; detail: string | null } } | null> {
   try {
     const res = await fetch("http://127.0.0.1:8000/health");
     if (!res.ok) return null;
@@ -141,6 +142,35 @@ export async function fetchHealth(): Promise<{ status: string; version: string }
   } catch {
     return null;
   }
+}
+
+export interface PolicyCategory {
+  key: string;
+  label: string;
+  description: string;
+  requires_confirmation: boolean;
+}
+
+export interface PoliciesResponse {
+  risk_categories: PolicyCategory[];
+}
+
+export async function fetchPolicies(): Promise<PoliciesResponse> {
+  const res = await fetch(`${BASE}/policies`);
+  if (!res.ok) return { risk_categories: [] };
+  return res.json();
+}
+
+export async function updatePolicy(body: { key: string; requires_confirmation: boolean }): Promise<PoliciesResponse> {
+  const res = await fetch(`${BASE}/policies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error("Failed to update policy");
+  }
+  return res.json();
 }
 
 export async function postAction(

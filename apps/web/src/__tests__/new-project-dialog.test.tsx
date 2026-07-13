@@ -94,4 +94,73 @@ describe("NewProjectDialog", () => {
     await user.click(screen.getByText("Next"));
     expect(screen.getByText("Back")).toBeInTheDocument();
   });
+
+  it("new-build payload contains project_display_name and real scope_content", async () => {
+    renderDialog("new_build");
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("My project"), "My Test Project");
+    await user.click(screen.getByText("Next"));
+    await user.type(screen.getByPlaceholderText("/Users/me/my-project"), "/tmp/test-project");
+    await user.type(screen.getByPlaceholderText("What should the app do? Who is it for? What should it NOT do?"), "Build a todo app with React");
+    await user.click(screen.getByText("Create Project"));
+
+    expect(mockPostAction).toHaveBeenCalledWith(
+      "start_new_project",
+      expect.objectContaining({
+        project_display_name: "My Test Project",
+        scope_content: "Build a todo app with React",
+      })
+    );
+  });
+
+  it("existing-app payload contains project_display_name and NO scope_content", async () => {
+    renderDialog("existing_app");
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("My project"), "Existing Project");
+    await user.click(screen.getByText("Next"));
+    await user.type(screen.getByPlaceholderText("/Users/me/my-project"), "/tmp/existing-project");
+    await user.click(screen.getByText("Start Audit"));
+
+    await waitFor(() => {
+      expect(mockPostAction).toHaveBeenCalledWith("load_existing_project", {
+        project_display_name: "Existing Project",
+      });
+      // Should NOT have scope_content
+      const calls = mockPostAction.mock.calls;
+      const lastCall = calls[calls.length - 1];
+      expect(lastCall[1]).not.toHaveProperty("scope_content");
+    });
+  });
+
+  it("Create button disabled until scope non-empty (new build only)", async () => {
+    renderDialog("new_build");
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("My project"), "Test");
+    await user.click(screen.getByText("Next"));
+    await user.type(screen.getByPlaceholderText("/Users/me/my-project"), "/tmp/test");
+
+    // Create button should be disabled initially (empty scope)
+    expect(screen.getByText("Create Project")).toBeDisabled();
+
+    // Type in scope
+    await user.type(screen.getByPlaceholderText("What should the app do? Who is it for? What should it NOT do?"), "Some scope");
+    expect(screen.getByText("Create Project")).not.toBeDisabled();
+  });
+
+  it("existing-app dialog shows read-only audit progress label while loading", async () => {
+    // Mock a delayed response
+    mockPostAction.mockImplementationOnce(() => new Promise(resolve => setTimeout(() => resolve({ status: "ok" }), 100)));
+
+    renderDialog("existing_app");
+    const user = userEvent.setup();
+    await user.type(screen.getByPlaceholderText("My project"), "Test");
+    await user.click(screen.getByText("Next"));
+    await user.type(screen.getByPlaceholderText("/Users/me/my-project"), "/tmp/test");
+    await user.click(screen.getByText("Start Audit"));
+
+    // Should show the progress label
+    await waitFor(() => {
+      expect(screen.getByText("Auditing your repository — read-only, this can take a minute or two")).toBeInTheDocument();
+    });
+  });
 });

@@ -469,6 +469,16 @@ class ActionService:
                 return merged
 
         # 17. Return
+        # Special handling for audit_existing_app/load_existing_project failure
+        # return error status so dialog stays open
+        if adapter_action in ("audit_existing_app", "load_existing_project") and not result.success:
+            return {
+                "status": "error",
+                "message": f"Audit failed: {result.output_text[:500]}",
+                "new_state": final_state,
+                "run_id": run.run_id,
+            }
+
         return {
             "status": "ok" if result.success else "failed",
             "outcome": result.outcome,

@@ -1,0 +1,39 @@
+{
+  "risk_categories": {
+    "modify_files": {
+      "name": "modify_files",
+      "label": "Modify Files",
+      "description": "This action may create, modify, or delete files in your project directory.",
+      "default_explanation": "This action will modify files in your project directory according to the approved plan. Review changes after completion.",
+      "requires_confirmation": true
+    },
+    "install_packages": {
+      "name": "install_packages",
+      "label": "Install Packages",
+      "description": "This action may install or update software packages.",
+      "default_explanation": "This action may install new dependencies or update existing ones. Review changes after completion.",
+      "requires_confirmation": true
+    },
+    "destructive": {
+      "name": "destructive",
+      "label": "Destructive",
+      "description": "This action may permanently discard progress or data.",
+      "default_explanation": "This action will discard uncompleted work and cannot be undone. Make sure you want to proceed.",
+      "requires_confirmation": true
+    },
+    "git_operation": {
+      "name": "git_operation",
+      "label": "Git Operation",
+      "description": "This action performs git operations that may affect version history.",
+      "default_explanation": "This action may commit, branch, or otherwise modify git history. Review changes after completion.",
+      "requires_confirmation": true
+    },
+    "config_change": {
+      "name": "config_change",
+      "label": "Configuration Change",
+      "description": "This action modifies configuration files.",
+      "default_explanation": "This action may modify configuration files. Review changes after completion.",
+      "requires_confirmation": true
+    }
+  }
+}

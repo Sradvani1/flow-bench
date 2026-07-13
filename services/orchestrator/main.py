@@ -1,3 +1,4 @@
+import shutil
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -54,7 +55,16 @@ app.add_exception_handler(Exception, general_error_handler)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.1.0"}
+    adapter_found = shutil.which("opencode") is not None
+    return {
+        "status": "ok",
+        "version": "0.1.0",
+        "adapter": {
+            "name": "opencode",
+            "available": adapter_found,
+            "detail": None if adapter_found else "OpenCode CLI not found on PATH",
+        },
+    }
 
 
 if __name__ == "__main__":

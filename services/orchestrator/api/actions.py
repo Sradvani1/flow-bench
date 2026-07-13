@@ -21,6 +21,7 @@ from services.orchestrator.policies import get_risk_explanation, requires_confir
 from services.orchestrator.schemas.approvals import ApprovalRecord
 from services.orchestrator.schemas.errors import ErrorResponse
 from services.orchestrator.schemas.state import CurrentState
+from services.orchestrator.store.app_config import read_app_config, write_app_config
 from services.orchestrator.store.event_log import EventLog
 from services.orchestrator.store.file_store import FileStore
 
@@ -96,10 +97,72 @@ async def get_actions():
     return available
 
 
+@router.get("/policies")
+async def get_policies():
+    policies = read_app_config("policies.json")
+    if policies is None:
+        from services.orchestrator.policies import _load_policies_from_disk
+        policies = _load_policies_from_disk()
+    risk_categories = policies.get("risk_categories", {})
+    result = []
+    for key, cat in risk_categories.items():
+        result.append({
+            "key": key,
+            "label": cat.get("label", key),
+            "description": cat.get("description", ""),
+            "requires_confirmation": cat.get("requires_confirmation", False),
+        })
+    return {"risk_categories": result}
+
+
+@router.post("/policies")
+async def update_policy(body: dict):
+    key = body.get("key")
+    requires_confirmation = body.get("requires_confirmation")
+    if key is None or requires_confirmation is None:
+        return JSONResponse(
+            status_code=400,
+            content=ErrorResponse(
+                message="Missing required fields: key and requires_confirmation.",
+                suggested_action=(
+                    "Provide both 'key' and 'requires_confirmation' in the request body."
+                ),
+                error_code="INVALID_REQUEST",
+            ).model_dump(),
+        )
+    policies = read_app_config("policies.json")
+    if policies is None:
+        from services.orchestrator.policies import _load_policies_from_disk
+        policies = _load_policies_from_disk()
+    risk_categories = policies.get("risk_categories", {})
+    if key not in risk_categories:
+        return JSONResponse(
+            status_code=404,
+            content=ErrorResponse(
+                message=f"Unknown risk category '{key}'.",
+                suggested_action="Check available categories via GET /api/v1/policies.",
+                error_code="UNKNOWN_CATEGORY",
+            ).model_dump(),
+        )
+    risk_categories[key]["requires_confirmation"] = bool(requires_confirmation)
+    policies["risk_categories"] = risk_categories
+    write_app_config("policies.json", policies)
+    result = []
+    for k, cat in risk_categories.items():
+        result.append({
+            "key": k,
+            "label": cat.get("label", k),
+            "description": cat.get("description", ""),
+            "requires_confirmation": cat.get("requires_confirmation", False),
+        })
+    return {"risk_categories": result}
+
+
 class ActionRequest(BaseModel):
     scope_content: Optional[str] = None
     repo_path: Optional[str] = None
     confirmed: bool = False
+    project_display_name: Optional[str] = None
 
 
 @router.post("/actions/{action}")
@@ -125,8 +188,11 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
     # Load state early for event metadata
     state_data = store.read_json("current-state.json")
     if action == "start_new_project" and state_data is None:
+        display_name = (
+            body.project_display_name if body and body.project_display_name else "My Project"
+        )
         state_data = CurrentState(
-            project_display_name="My Project",
+            project_display_name=display_name,
             repo_path=str(Path.cwd()),
             mode="new_build",
             project_state="starting",
@@ -150,8 +216,11 @@ async def post_action(action: str, body: Optional[ActionRequest] = None):
                 "state_unchanged": True,
             }
         repo_path = str(Path.cwd().resolve())
+        display_name = (
+            body.project_display_name if body and body.project_display_name else "My Project"
+        )
         boot_state = CurrentState(
-            project_display_name="My Project",
+            project_display_name=display_name,
             repo_path=repo_path,
             mode="existing_app",
             project_state="starting",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,33 +12,36 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { useProjectState } from "@/hooks/use-project-state";
-import { fetchHealth } from "@/lib/api";
+import { fetchHealth, fetchPolicies, updatePolicy } from "@/lib/api";
 import { useTheme } from "next-themes";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { Circle } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 
 interface SettingsScreenProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-const RISK_CATEGORIES = [
-  { key: "modify_files", label: "Modify Files", description: "Actions that change files on disk" },
-  { key: "destructive", label: "Destructive", description: "Actions that permanently delete or reset state" },
-  { key: "communication", label: "Communication", description: "Actions that send data to external services" },
-];
+interface PolicyCategory {
+  key: string;
+  label: string;
+  description: string;
+  requires_confirmation: boolean;
+}
 
 export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
   const { data: state } = useProjectState();
   const { theme, setTheme } = useTheme();
-  const [health, setHealth] = useState<{ status: string; version: string } | null>(null);
-  const [projectName, setProjectName] = useState(state?.project_display_name ?? "");
+  const { toast } = useToast();
+  const [health, setHealth] = useState<{
+    status: string;
+    version: string;
+    adapter?: { name: string; available: boolean; detail: string | null };
+  } | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
-  const [policyToggles, setPolicyToggles] = useState<Record<string, boolean>>({
-    modify_files: true,
-    destructive: true,
-    communication: false,
-  });
+  const [policyCategories, setPolicyCategories] = useState<PolicyCategory[]>([]);
+  const [policiesLoading, setPoliciesLoading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -48,11 +51,37 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
       if (!cancelled) setHealth(h);
     };
     check();
-    setProjectName(state?.project_display_name ?? "");
+    const loadPolicies = async () => {
+      setPoliciesLoading(true);
+      try {
+        const data = await fetchPolicies();
+        if (!cancelled) setPolicyCategories(data.risk_categories);
+      } catch {
+        // fallback to empty, UI will show nothing
+      } finally {
+        if (!cancelled) setPoliciesLoading(false);
+      }
+    };
+    loadPolicies();
     return () => { cancelled = true; };
-  }, [open, state?.project_display_name]);
+  }, [open]);
 
   const modeLabel = state?.mode === "existing_app" ? "Existing App" : "New Build";
+
+  const handlePolicyToggle = useCallback(async (key: string, checked: boolean) => {
+    setPolicyCategories((prev) =>
+      prev.map((cat) => (cat.key === key ? { ...cat, requires_confirmation: checked } : cat))
+    );
+    try {
+      await updatePolicy({ key, requires_confirmation: checked });
+      toast("Policy updated");
+    } catch {
+      // Revert on failure
+      setPolicyCategories((prev) =>
+        prev.map((cat) => (cat.key === key ? { ...cat, requires_confirmation: !checked } : cat))
+      );
+    }
+  }, [toast]);
 
   return (
     <>
@@ -63,7 +92,9 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
           className="sm:max-w-[560px] max-h-[85vh] overflow-y-auto"
         >
           <DialogHeader>
-            <DialogTitle id="settings-title" className="font-display text-xl">Settings</DialogTitle>
+            <DialogTitle id="settings-title" className="font-display text-xl">
+              Settings
+            </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
@@ -72,12 +103,17 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
               <h2 className="font-body font-bold text-sm text-text mb-3">Project</h2>
               <div className="space-y-3">
                 <div>
-                  <label htmlFor="settings-project-name" className="block text-xs text-text-muted mb-1">Name</label>
+                  <label
+                    htmlFor="settings-project-name"
+                    className="block text-xs text-text-muted mb-1"
+                  >
+                    Name
+                  </label>
                   <Input
                     id="settings-project-name"
-                    value={projectName}
-                    onChange={(e) => setProjectName(e.target.value)}
-                    className="text-sm"
+                    value={state?.project_display_name ?? ""}
+                    readOnly
+                    className="text-sm bg-surface-inset"
                   />
                 </div>
                 <div>
@@ -88,21 +124,10 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
                 </div>
                 <div>
                   <span className="block text-xs text-text-muted mb-1">Repo path</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-text font-mono truncate flex-1">{state?.repo_path ?? "—"}</span>
-                    <Button variant="ghost" size="sm" className="text-xs h-7">Change</Button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">Backend</span>
-                  <Circle
-                    className={`h-2 w-2 fill-current ${
-                      health?.status === "ok" ? "text-success" : "text-error"
-                    }`}
-                  />
-                  <span className="text-xs text-text-muted">
-                    {health ? (health.status === "ok" ? "Connected" : "Unreachable") : "Checking..."}
+                  <span className="text-sm text-text font-mono truncate block">
+                    {state?.repo_path ?? "—"}
                   </span>
+                  <p className="text-xs text-text-muted mt-1">Set when you create the project.</p>
                 </div>
               </div>
             </section>
@@ -129,12 +154,37 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
               <h2 className="font-body font-bold text-sm text-text mb-3">Adapter</h2>
               <div className="text-sm text-text-muted space-y-1">
                 <p>Name: OpenCode</p>
-                <div className="flex items-center gap-2">
-                  <span>Status:</span>
-                  <Circle className="h-2 w-2 fill-current text-success" />
-                  <span>Connected</span>
-                </div>
+                {health?.adapter ? (
+                  <div className="flex items-center gap-2">
+                    <span>Status:</span>
+                    <Circle
+                      className={`h-2 w-2 fill-current ${
+                        health.adapter.available ? "text-success" : "text-warning"
+                      }`}
+                    />
+                    <span>
+                      {health.adapter.available ? "OpenCode available" : "OpenCode not found"}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span>Status:</span>
+                    <Circle
+                      className={`h-2 w-2 fill-current ${
+                        health?.status === "ok" ? "text-success" : "text-error"
+                      }`}
+                    />
+                    <span>
+                      {health?.status === "ok" ? "Connected" : "Unreachable"}
+                    </span>
+                  </div>
+                )}
               </div>
+              {health?.adapter && !health.adapter.available && (
+                <p className="mt-2 text-xs text-text-muted">
+                  Install OpenCode and configure a model — see the README "Before you start" section.
+                </p>
+              )}
             </section>
 
             <Separator className="bg-divider" />
@@ -142,25 +192,25 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
             {/* Policies */}
             <section role="heading" aria-level={2}>
               <h2 className="font-body font-bold text-sm text-text mb-3">Policies</h2>
-              <div className="space-y-3">
-                {RISK_CATEGORIES.map((cat) => (
-                  <label
-                    key={cat.key}
-                    className="flex items-center justify-between gap-3 py-1"
-                  >
-                    <div>
-                      <span className="block text-sm text-text">{cat.label}</span>
-                      <span className="block text-xs text-text-muted">{cat.description}</span>
-                    </div>
-                    <Switch
-                      checked={policyToggles[cat.key]}
-                      onCheckedChange={(checked) =>
-                        setPolicyToggles((prev) => ({ ...prev, [cat.key]: checked }))
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
+              {policiesLoading ? (
+                <p className="text-sm text-text-muted">Loading…</p>
+              ) : (
+                <div className="space-y-3">
+                  {policyCategories.map((cat) => (
+                    <label key={cat.key} className="flex items-center justify-between gap-3 py-1">
+                      <div>
+                        <span className="block text-sm text-text">{cat.label}</span>
+                        <span className="block text-xs text-text-muted">{cat.description}</span>
+                      </div>
+                      <Switch
+                        checked={cat.requires_confirmation}
+                        onCheckedChange={(checked) => handlePolicyToggle(cat.key, checked)}
+                        disabled={policiesLoading}
+                      />
+                    </label>
+                  ))}
+                </div>
+              )}
             </section>
 
             <Separator className="bg-divider" />
@@ -210,13 +260,13 @@ export function SettingsScreen({ open, onOpenChange }: SettingsScreenProps) {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
 
-      <NewProjectDialog
-        open={newProjectOpen}
-        onOpenChange={setNewProjectOpen}
-        initialMode="new_build"
-      />
+        <NewProjectDialog
+          open={newProjectOpen}
+          onOpenChange={setNewProjectOpen}
+          initialMode="new_build"
+        />
+      </Dialog>
     </>
   );
 }

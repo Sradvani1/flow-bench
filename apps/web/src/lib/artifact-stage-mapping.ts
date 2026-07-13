@@ -18,8 +18,8 @@ const STAGE_ARTIFACT_MAP: Record<string, ArtifactMapping> = {
     artifactKey: "scope",
     filename: "scope.json",
     rendererName: "ScopeCard",
-    emptyMessage: "No scope defined yet.",
-    suggestedAction: "Describe your app idea in the command pane.",
+    emptyMessage: "Write what you want to build or improve below, then generate the plan.",
+    suggestedAction: "Type your scope in the editor above.",
   },
   master_plan_drafting: {
     artifactKey: "master-plan",

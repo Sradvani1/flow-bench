@@ -25,6 +25,7 @@ export function NewProjectDialog({ open, onOpenChange, initialMode }: NewProject
   const [mode, setMode] = useState<"new_build" | "existing_app">(initialMode);
   const [projectName, setProjectName] = useState("");
   const [repoPath, setRepoPath] = useState("");
+  const [scopeContent, setScopeContent] = useState("");
   const [pathStatus, setPathStatus] = useState<"idle" | "valid" | "invalid">("idle");
   const [pathMessage, setPathMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,6 +40,7 @@ export function NewProjectDialog({ open, onOpenChange, initialMode }: NewProject
       setMode(initialMode);
       setProjectName("");
       setRepoPath("");
+      setScopeContent("");
       setPathStatus("idle");
       setPathMessage("");
     }
@@ -92,9 +94,13 @@ export function NewProjectDialog({ open, onOpenChange, initialMode }: NewProject
 
   const handleCreate = async () => {
     if (!projectName.trim() || !repoPath.trim()) return;
+    if (mode === "new_build" && !scopeContent.trim()) return;
     setLoading(true);
     const action = mode === "new_build" ? "start_new_project" : "load_existing_project";
-    const payload = mode === "new_build" ? { scope_content: projectName } : undefined;
+    const payload =
+      mode === "new_build"
+        ? { project_display_name: projectName, scope_content: scopeContent }
+        : { project_display_name: projectName };
     const res = await postAction(action, payload);
     setLoading(false);
     if (res.status === "error") {
@@ -244,6 +250,26 @@ export function NewProjectDialog({ open, onOpenChange, initialMode }: NewProject
               )}
             </div>
 
+            {mode === "new_build" && (
+              <div>
+                <label htmlFor="scope-content" className="block text-sm font-medium text-text mb-1.5">
+                  Describe the app you want to build
+                </label>
+                <textarea
+                  id="scope-content"
+                  className="w-full min-h-[120px] bg-surface-inset border border-border rounded-lg p-4 text-sm font-body text-text resize-y focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="What should the app do? Who is it for? What should it NOT do?"
+                  value={scopeContent}
+                  onChange={(e) => setScopeContent(e.target.value)}
+                  aria-required="true"
+                  aria-describedby="scope-helper"
+                />
+                <p id="scope-helper" className="mt-1.5 text-xs text-text-muted">
+                  A short paragraph is enough to start — you can refine it next.
+                </p>
+              </div>
+            )}
+
             {mode === "existing_app" && (
               <div className="rounded-lg border border-warning/30 bg-warning-muted p-4 text-sm">
                 <div className="flex items-start gap-2">
@@ -259,6 +285,17 @@ export function NewProjectDialog({ open, onOpenChange, initialMode }: NewProject
               </div>
             )}
 
+            {mode === "existing_app" && loading && (
+              <div className="rounded-lg border border-primary/30 bg-primary-muted p-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 rounded-full border-2 border-text-faint border-t-primary animate-spin" />
+                  <span className="font-medium text-text">
+                    Auditing your repository — read-only, this can take a minute or two
+                  </span>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>
                 Back
@@ -266,7 +303,7 @@ export function NewProjectDialog({ open, onOpenChange, initialMode }: NewProject
               <Button
                 className="flex-1"
                 onClick={handleCreate}
-                disabled={loading || !repoPath.trim() || pathStatus === "invalid"}
+                disabled={loading || !repoPath.trim() || pathStatus === "invalid" || (mode === "new_build" && !scopeContent.trim())}
               >
                 {loading
                   ? "Creating..."

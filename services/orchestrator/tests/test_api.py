@@ -94,6 +94,33 @@ class TestActions:
         assert data["status"] == "ok"
         assert data["new_state"] == "scope_ready"
 
+    def test_start_new_project_persists_display_name_and_scope(self):
+        custom_name = "My Custom Project"
+        custom_scope = "Build a todo app with React and TypeScript"
+        # Ensure clean state - delete any existing project state
+        import os
+        state_path = ".flowbench/current-state.json"
+        if os.path.exists(state_path):
+            os.unlink(state_path)
+
+        resp = client.post(
+            "/api/v1/actions/start_new_project",
+            json={"project_display_name": custom_name, "scope_content": custom_scope},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["new_state"] == "scope_ready"
+
+        store = FileStore(".")
+        state_data = store.read_json("current-state.json")
+        assert state_data is not None
+        assert state_data["project_display_name"] == custom_name
+
+        scope_data = store.read_json("scope.json")
+        assert scope_data is not None
+        assert scope_data["content"] == custom_scope
+
     def test_navigation_action_no_event(self):
         store = FileStore(".")
         store.write_json("current-state.json", {
@@ -584,6 +611,182 @@ class TestRunRecordMetadata:
         assert "scope" in run["input_artifact_refs"]
 
 
+class TestPoliciesEndpoints:
+    def test_get_policies_returns_categories(self):
+        resp = client.get("/api/v1/policies")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "risk_categories" in data
+        categories = data["risk_categories"]
+        assert isinstance(categories, list)
+        assert len(categories) >= 5
+        # modify_files, install_packages, destructive, git_operation, config_change
+        for cat in categories:
+            assert "key" in cat
+            assert "label" in cat
+            assert "description" in cat
+            assert "requires_confirmation" in cat
+            assert isinstance(cat["requires_confirmation"], bool)
+
+    def test_post_policies_updates_requires_confirmation(self):
+        # Get initial state
+        resp = client.get("/api/v1/policies")
+        assert resp.status_code == 200
+        initial = resp.json()
+        modify_files_cat = next(c for c in initial["risk_categories"] if c["key"] == "modify_files")
+        initial_value = modify_files_cat["requires_confirmation"]
+
+        # Flip it
+        new_value = not initial_value
+        policy_update = {"key": "modify_files", "requires_confirmation": new_value}
+        resp = client.post("/api/v1/policies", json=policy_update)
+        assert resp.status_code == 200
+        data = resp.json()
+        updated_cat = next(c for c in data["risk_categories"] if c["key"] == "modify_files")
+        assert updated_cat["requires_confirmation"] == new_value
+
+        # Verify it persisted by reading again
+        resp2 = client.get("/api/v1/policies")
+        assert resp2.status_code == 200
+        data2 = resp2.json()
+        updated_cat2 = next(c for c in data2["risk_categories"] if c["key"] == "modify_files")
+        assert updated_cat2["requires_confirmation"] == new_value
+
+        # Restore original value
+        policy_update = {"key": "modify_files", "requires_confirmation": initial_value}
+        client.post("/api/v1/policies", json=policy_update)
+
+    def test_post_policies_requires_key_and_value(self):
+        resp = client.post("/api/v1/policies", json={"key": "modify_files"})
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["error_code"] == "INVALID_REQUEST"
+
+        resp = client.post("/api/v1/policies", json={"requires_confirmation": True})
+        assert resp.status_code == 400
+        data = resp.json()
+        assert data["error_code"] == "INVALID_REQUEST"
+
+    def test_post_policies_unknown_category_returns_404(self):
+        policy_update = {"key": "nonexistent", "requires_confirmation": True}
+        resp = client.post("/api/v1/policies", json=policy_update)
+        assert resp.status_code == 404
+        data = resp.json()
+        assert data["error_code"] == "UNKNOWN_CATEGORY"
+
+
+class TestPolicyApprovalBehavior:
+    def test_flipped_requires_confirmation_changes_approval_decision(self, mock_adapter):
+        """Flipping requires_confirmation for modify_files changes needs_approval vs dispatch.
+
+        Uses start_building (adapter action with modify_files risk) in phase_ready_to_build state.
+        """
+        # Get current policy state
+        resp = client.get("/api/v1/policies")
+        assert resp.status_code == 200
+        initial = resp.json()
+        modify_files_cat = next(c for c in initial["risk_categories"] if c["key"] == "modify_files")
+        initial_value = modify_files_cat["requires_confirmation"]
+
+        try:
+            # Set modify_files to NOT require confirmation
+            policy_update = {"key": "modify_files", "requires_confirmation": False}
+            resp = client.post("/api/v1/policies", json=policy_update)
+            assert resp.status_code == 200
+
+            # Set up project in phase_ready_to_build state
+            store = FileStore(".")
+            store.write_json("current-state.json", {
+                "schema_version": 1,
+                "project_display_name": "Test",
+                "repo_path": str(Path.cwd()),
+                "mode": "new_build",
+                "project_state": "phase_queue_ready",
+                "current_phase_id": "phase_001",
+                "current_phase_state": "phase_ready_to_build",
+                "total_phases": 1,
+                "phases_complete": 0,
+                "adapter": "opencode",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+            store.write_json("phase-queue.json", {
+                "schema_version": 1,
+                "phases": [{
+                    "phase_id": "phase_001",
+                    "phase_name": "Phase 1",
+                    "summary": "Build something",
+                    "status": "upcoming",
+                }]
+            })
+            store.write_json("phase-plan-phase_001.json", {
+                "schema_version": 1,
+                "phase_id": "phase_001",
+                "content": "Plan content",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+            # start_building should dispatch without confirmation when requires_confirmation=False
+            resp = client.post("/api/v1/actions/start_building", json={})
+            assert resp.status_code == 200
+            data = resp.json()
+            # With requires_confirmation=False, should dispatch (not need approval)
+            assert data["status"] != "needs_approval"
+            assert data["status"] in ("ok", "failed")  # adapter may fail but not needs_approval
+
+            # Now set it back to True
+            resp = client.post(
+                "/api/v1/policies",
+                json={"key": "modify_files", "requires_confirmation": True},
+            )
+            assert resp.status_code == 200
+
+            # Reset state
+            store.write_json("current-state.json", {
+                "schema_version": 1,
+                "project_display_name": "Test",
+                "repo_path": str(Path.cwd()),
+                "mode": "new_build",
+                "project_state": "phase_queue_ready",
+                "current_phase_id": "phase_001",
+                "current_phase_state": "phase_ready_to_build",
+                "total_phases": 1,
+                "phases_complete": 0,
+                "adapter": "opencode",
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+            # Same action should now require approval
+            resp = client.post("/api/v1/actions/start_building", json={})
+            assert resp.status_code == 200
+            data = resp.json()
+            # With requires_confirmation=True and no confirmed flag, should need approval
+            assert data["status"] == "needs_approval"
+            assert data["risk_category"] == "modify_files"
+
+        finally:
+            # Restore original value
+            client.post(
+                "/api/v1/policies",
+                json={"key": "modify_files", "requires_confirmation": initial_value},
+            )
+
+
+class TestHealthEndpoint:
+    def test_health_returns_adapter_available(self):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert data["version"] == "0.1.0"
+        assert "adapter" in data
+        assert data["adapter"]["name"] == "opencode"
+        assert isinstance(data["adapter"]["available"], bool)
+        if data["adapter"]["available"]:
+            assert data["adapter"]["detail"] is None
+        else:
+            assert data["adapter"]["detail"] == "OpenCode CLI not found on PATH"
+
+
 class TestCrashRecovery:
     def test_restart_does_not_rewind_state(self):
         store = FileStore(".")
@@ -731,10 +934,24 @@ class TestExistingApp:
         )
         resp = client.post("/api/v1/actions/load_existing_project")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "failed"
+        # Audit failure returns "error" status so dialog stays open with plain-English message
+        assert resp.json()["status"] == "error"
         assert resp.json()["new_state"] == "project_blocked"
         store = FileStore(".")
         assert store.read_json("audit.json") is None
+
+    def test_adapter_failure_returns_error_status_for_dialog(self, mock_adapter):
+        """Audit failure returns status=error so dialog stays open with plain-English message."""
+        Path(".flowbench/current-state.json").unlink(missing_ok=True)
+        mock_adapter.result = AdapterResult(
+            success=False, outcome="failed", output_text="Scan failed: connection timeout",
+        )
+        resp = client.post("/api/v1/actions/load_existing_project")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "error"
+        assert "Scan failed" in data["message"]
+        assert data["new_state"] == "project_blocked"
 
     def test_adapter_failure_logs_audit_failed(self, mock_adapter):
         Path(".flowbench/current-state.json").unlink(missing_ok=True)
@@ -764,7 +981,8 @@ class TestExistingApp:
         )
         resp = client.post("/api/v1/actions/load_existing_project")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "failed"
+        # Malformed audit output returns "error" status so dialog stays open
+        assert resp.json()["status"] == "error"
         assert resp.json()["new_state"] == "project_blocked"
         store = FileStore(".")
         assert store.read_json("audit.json") is None
@@ -787,7 +1005,8 @@ class TestExistingApp:
         )
         resp = client.post("/api/v1/actions/load_existing_project")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "failed"
+        # Missing required fields returns "error" status so dialog stays open
+        assert resp.json()["status"] == "error"
         store = FileStore(".")
         assert store.read_json("audit.json") is None
 
@@ -805,7 +1024,8 @@ class TestExistingApp:
         )
         resp = client.post("/api/v1/actions/load_existing_project")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "failed"
+        # Mismatched path returns "error" status so dialog stays open
+        assert resp.json()["status"] == "error"
         store = FileStore(".")
         assert store.read_json("audit.json") is None
 

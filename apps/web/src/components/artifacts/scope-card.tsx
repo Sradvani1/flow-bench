@@ -12,10 +12,10 @@ interface ScopeCardProps {
 }
 
 export function ScopeCard({ data, currentState }: ScopeCardProps) {
-  if (!data) return null;
-  const content = String(data.content ?? "");
-  const updatedAt = String(data.updated_at ?? "");
+  const content = String(data?.content ?? "");
+  const updatedAt = String(data?.updated_at ?? "");
   const isEditing = currentState === "scope_ready";
+  const hasContent = content.trim().length > 0;
 
   if (!isEditing) {
     const sections = parseScopeContent(content);
@@ -70,38 +70,50 @@ export function ScopeCard({ data, currentState }: ScopeCardProps) {
     );
   }
 
+  if (!hasContent) {
+    return <ScopeEditor content="" updatedAt="" isInitial={true} />;
+  }
+
   return <ScopeEditor content={content} updatedAt={updatedAt} />;
 }
 
-function ScopeEditor({ content, updatedAt }: { content: string; updatedAt: string }) {
+function ScopeEditor({ content, updatedAt, isInitial = false }: { content: string; updatedAt: string; isInitial?: boolean }) {
   const [editContent, setEditContent] = useState(content);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const handleBlur = useCallback(async () => {
+    const trimmed = editContent.trim();
+    if (!trimmed) return;
     if (editContent === content) return;
+    setSaveError(null);
     const res = await postAction("edit_scope", { scope_content: editContent });
     if (res.status === "error") {
-      toast(res.message, "destructive");
+      setSaveError("Couldn't save your scope — your text is kept below. Try again.");
     } else {
       toast("Scope saved");
+      queryClient.invalidateQueries({ queryKey: ["project-state"] });
+      queryClient.invalidateQueries({ queryKey: ["artifact"] });
     }
-    queryClient.invalidateQueries({ queryKey: ["project-state"] });
-    queryClient.invalidateQueries({ queryKey: ["artifact"] });
   }, [editContent, content, toast, queryClient]);
 
   return (
     <div className="bg-surface-2 shadow-sm rounded-xl p-6 max-w-[720px] mx-auto">
       <span className="inline-flex items-center rounded-full bg-primary-muted text-primary px-2.5 py-0.5 text-xs font-medium mb-4">
-        Scope — Editing
+        {isInitial ? "Scope — Write your idea" : "Scope — Editing"}
       </span>
       <textarea
         className="w-full min-h-[200px] bg-surface-inset border border-border rounded-lg p-4 text-sm font-body text-text resize-y focus:outline-none focus:ring-2 focus:ring-primary"
         value={editContent}
-        onChange={(e) => setEditContent(e.target.value)}
+        onChange={(e) => { setEditContent(e.target.value); setSaveError(null); }}
         onBlur={handleBlur}
         aria-label="Scope content editor"
+        placeholder={isInitial ? "Describe what you want to build or improve — a short paragraph is enough to start." : undefined}
       />
+      {saveError && (
+        <p className="mt-2 text-xs text-error" role="alert">{saveError}</p>
+      )}
       <div className="flex justify-between items-center mt-2">
         <p className="text-xs text-text-faint">
           {updatedAt && <>Updated {formatRelative(updatedAt)}</>}

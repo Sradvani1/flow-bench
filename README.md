@@ -6,6 +6,30 @@
 
 FlowBench sits **above** AI coding agents. It does not write code itself — it orchestrates the process: state tracking, artifact persistence, approval gates, and session handoffs. The configured execution backend (OpenCode, etc.) does the actual building.
 
+## Before you start
+
+FlowBench orchestrates an AI coding backend. It needs **OpenCode** installed and configured with a default model.
+
+1. **Install OpenCode** (one line):
+   ```sh
+   curl -LsSf https://opencode.ai/install.sh | sh
+   ```
+   Or via Homebrew: `brew install opencode-ai/tap/opencode`  
+   Or Go: `go install github.com/opencode-ai/opencode@latest`
+
+   See <https://opencode.ai> for all install options.
+
+2. **Configure a default model** in `~/.config/opencode/opencode.json`:
+   ```json
+   {
+     "models": {
+       "default": { "provider": "<provider>", "model": "<model-id>" }
+     }
+   }
+   ```
+   *This is illustrative — see OpenCode's docs for the exact config schema.*  
+   **FlowBench does not pick the model — OpenCode does. Set it once here.**
+
 ## Quick start
 
 ```sh
