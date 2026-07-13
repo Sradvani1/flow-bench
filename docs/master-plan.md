@@ -41,13 +41,14 @@ If any conflict exists between this master plan and the workflow contract, **the
 
 | Phase | Description | Status | Notes |
 |-------|-------------|--------|-------|
-| 1 | Core state machine, API, FileStore, EventLog, RunStore | ✅ Complete | All tests pass (237/237) |
+| 1 | Core state machine, API, FileStore, EventLog, RunStore | ✅ Complete | All tests pass (246/246) |
 | 2 | Frontend console shell (header, command pane, queue panel, artifact panel, blocked/recovery) | ✅ Complete | Phase 9 implementation |
-| 3 | **Adapter dispatch pipeline** (preflight/commit, context bundles, RunRecord, OpenCodeAdapter) | ✅ Complete | This session — `OpenCodeAdapter` registered, end-to-end flow works |
+| 3 | **Adapter dispatch pipeline** (preflight/commit, context bundles, RunRecord, OpenCodeAdapter) | ✅ Complete | `OpenCodeAdapter` registered, end-to-end flow works |
 | 4 | Artifact renderers, timeline, stage-to-artifact mapping | ✅ Complete | Phase 9 implementation |
-| 5 | Policy engine, approval audit events, dialog polish | ⏳ Planned | |
+| 5 | Policy engine, approval audit events, dialog polish | ✅ Complete | Policy engine + audit events + dialog polish |
 | 6 | Existing app mode: audit service, context injection | ✅ Complete | `load_existing_project` works end-to-end |
-| 7 | CLI, recovery UI, safety enforcement, golden-path tests, docs | ⏳ Planned | |
+| 7 | CLI, recovery UI, safety enforcement, golden-path tests, docs | ✅ Complete | `flowbench` CLI, recovery UI, safety, smoke tests |
+| 8 | Auto-dispatch for review/test with fix-cycle support | ✅ Complete | Review → test → handoff auto-dispatch chain |
 | **Atomic writes** | Not defined | Write temp → fsync → rename; events only after durable write |
 | **Schema versioning** | Not defined | `schema_version` field on every top-level artifact (starts at 1) |
 | **AdopterResult** | Had `proposed_risky_actions` | Removed — risk detection is config-driven, not adapter-driven |
